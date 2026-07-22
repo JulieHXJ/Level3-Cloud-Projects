@@ -1,18 +1,4 @@
-# terraform {
-#     required_version = ">= 1.15.0, < 2.0.0"
 
-#     required_providers {
-#         openstack= {
-#             source = "terraform-provider-openstack/openstack"
-#             version = "3.4.0"
-#         }
-#     }
-# }
-
-
-# # variables will be read from shell 
-# provider "openstack" {
-# }
 
 
 
@@ -26,9 +12,10 @@
 #   name = "m1.medium"
 # }
 
-# data "openstack_networking_network_v2" "private" {
-#   name = "private"
-# }
+data "openstack_networking_network_v2" "public" {
+  name     = "public"
+  external = true
+}
 
 # RESOURCE is created and managed by terraform
 # creat a virtual network 
@@ -54,6 +41,62 @@ resource "openstack_networking_subnet_v2" "private_subnet" {
 
 }
 
+# create router and connect to private subnet
+resource "openstack_networking_router_v2" "router" {
+  name                = "julie-tf-router"
+  admin_state_up      = true
+  external_network_id = data.openstack_networking_network_v2.public.id
+
+}
+
+resource "openstack_networking_router_interface_v2" "private_interface" {
+  router_id = openstack_networking_router_v2.router.id
+  subnet_id = openstack_networking_subnet_v2.private_subnet.id
+}
+
+
+
+
+# Security Group
+resource "openstack_networking_secgroup_v2" "vm_security_group" {
+  name = "julie-tf-security-group"
+  description = "rules for terraform managed vm"
+}
+
+resource "openstack_networking_secgroup_rule_v2" "ssh_ingress" {
+  security_group_id = openstack_networking_secgroup_v2.vm_security_group.id
+  direction = "ingress"
+  ethertype = "IPv4"
+
+  protocol = "tcp"
+  port_range_max = 22
+  port_range_min = 22
+  remote_ip_prefix = "0.0.0.0/0"
+}
+
+
+#ICMP for ping
+
+
+
+# create port
+resource "openstack_networking_port_v2" "vm_port" {
+  network_id = openstack_networking_network_v2.private_network.id
+
+  name = "julie-tf-vm-port"
+  admin_state_up = true
+
+  security_group_ids = [
+    openstack_networking_secgroup_v2.vm_security_group.id,
+  ]
+
+  fixed_ip {
+    subnet_id = openstack_networking_subnet_v2.private_subnet.id
+  }
+}
+
+
+
 
 
 
@@ -63,10 +106,11 @@ resource "openstack_compute_instance_v2" "vm" {
   image_name      = "Ubuntu 24.04"
   flavor_name     = "m1.medium"
   key_pair        = "level3-stackit-key"
-  security_groups = ["default"]
+  # security_groups = ["default"]
 
   network {
-    name = "private"
+    # name = "private"
+    port = openstack_networking_port_v2.vm_port.id
   }
 }
 
