@@ -17,3 +17,5 @@ crash.*.log
 # Local variable files that may contain secrets
 *.auto.tfvars
 *.auto.tfvars.json
+
+generated/
