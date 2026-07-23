@@ -20,13 +20,13 @@ data "openstack_networking_network_v2" "public" {
 # RESOURCE is created and managed by terraform
 # creat a virtual network 
 resource "openstack_networking_network_v2" "private_network" {
-  name           = "julie-tf-network"
+  name           = "tf-private-network"
   admin_state_up = true
 }
 
 # create ipv4 subnet by Neutron with DNS server
 resource "openstack_networking_subnet_v2" "private_subnet" {
-  name       = "julie-tf-subnet"
+  name       = "tf-subnet"
   network_id = openstack_networking_network_v2.private_network.id # dependency
 
   cidr       = "192.168.77.0/24"
@@ -43,7 +43,7 @@ resource "openstack_networking_subnet_v2" "private_subnet" {
 
 # create router and connect to private subnet
 resource "openstack_networking_router_v2" "router" {
-  name                = "julie-tf-router"
+  name                = "tf-router"
   admin_state_up      = true
   external_network_id = data.openstack_networking_network_v2.public.id
 
@@ -59,23 +59,22 @@ resource "openstack_networking_router_interface_v2" "private_interface" {
 
 # Security Group
 resource "openstack_networking_secgroup_v2" "vm_security_group" {
-  name = "julie-tf-security-group"
+  name        = "tf-security-group"
   description = "rules for terraform managed vm"
 }
 
 resource "openstack_networking_secgroup_rule_v2" "ssh_ingress" {
   security_group_id = openstack_networking_secgroup_v2.vm_security_group.id
-  direction = "ingress"
-  ethertype = "IPv4"
+  direction         = "ingress"
+  ethertype         = "IPv4"
 
-  protocol = "tcp"
-  port_range_max = 22
-  port_range_min = 22
-  remote_ip_prefix = "0.0.0.0/0"
+  protocol         = "tcp"
+  port_range_max   = 22
+  port_range_min   = 22
+  remote_ip_prefix = "0.0.0.0/0" #allow all ipv4
 }
 
 
-#ICMP for ping
 
 
 
@@ -83,7 +82,7 @@ resource "openstack_networking_secgroup_rule_v2" "ssh_ingress" {
 resource "openstack_networking_port_v2" "vm_port" {
   network_id = openstack_networking_network_v2.private_network.id
 
-  name = "julie-tf-vm-port"
+  name           = "tf-vm-port"
   admin_state_up = true
 
   security_group_ids = [
@@ -96,16 +95,31 @@ resource "openstack_networking_port_v2" "vm_port" {
 }
 
 
+# allow ICMP for ping
+resource "openstack_networking_secgroup_rule_v2" "icmp_ingress" {
+  direction         = "ingress"
+  ethertype         = "IPv4"
+  protocol          = "icmp"
+  remote_ip_prefix  = "0.0.0.0/0"
+  security_group_id = openstack_networking_secgroup_v2.vm_security_group.id
+}
 
+# Floating ip
+resource "openstack_networking_floatingip_v2" "vm_floating_ip" {
+  pool    = data.openstack_networking_network_v2.public.name
+  port_id = openstack_networking_port_v2.vm_port.id
+
+  depends_on = [openstack_networking_router_interface_v2.private_interface] #setup router connection with fixed ip
+}
 
 
 
 # Creating the vm
 resource "openstack_compute_instance_v2" "vm" {
-  name            = "terraform-vm-flat"
-  image_name      = "Ubuntu 24.04"
-  flavor_name     = "m1.medium"
-  key_pair        = "level3-stackit-key"
+  name        = "terraform-vm-flat"
+  image_name  = "Ubuntu 24.04"
+  flavor_name = "m1.medium"
+  key_pair    = "level3-stackit-key"
   # security_groups = ["default"]
 
   network {
@@ -133,9 +147,11 @@ output "vm_status" {
 }
 
 output "vm_private_ip" {
-  value = openstack_compute_instance_v2.vm.access_ip_v4
+  value = openstack_networking_port_v2.vm_port.all_fixed_ips[0]
 }
 
-# output "vm_network_addresses" {
-#   value = openstack_compute_instance_v2.vm.all_addresses
-# }
+output "vm_floating_ip" {
+  value       = openstack_networking_floatingip_v2.vm_floating_ip.address
+  description = "Floating IP for VM access"
+}
+
