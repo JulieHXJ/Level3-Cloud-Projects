@@ -1,4 +1,18 @@
+terraform {
+  required_version = ">= 1.15.0, < 2.0.0"
 
+  required_providers {
+    openstack = {
+      source  = "terraform-provider-openstack/openstack"
+      version = "3.4.0"
+    }
+  }
+}
+
+
+# env variables will be read from shell 
+provider "openstack" {
+}
 
 
 
@@ -119,19 +133,14 @@ resource "openstack_compute_instance_v2" "vm" {
   name        = "terraform-vm-flat"
   image_name  = "Ubuntu 24.04"
   flavor_name = "m1.medium"
-  key_pair    = "level3-stackit-key"
-  # security_groups = ["default"]
+  key_pair    = "level3-stackit-key" #todo: auto generate ssh key pair on each run
+
 
   network {
-    # name = "private"
+
     port = openstack_networking_port_v2.vm_port.id
   }
 }
-
-
-
-
-
 
 
 
