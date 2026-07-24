@@ -1,0 +1,23 @@
+
+# cloud init ：package_update、packages、write_files、runcmd
+package_update: true
+package_upgrade: false
+
+packages:
+  - curl
+  - ca-certificates #https
+
+write_files:
+  - path: /usr/local/bin/install-k3s.sh
+    owner: root:root
+    permission: "0755"
+    content: 
+    # bash script
+    
+
+
+
+runcmd:
+  - [bash, /usr/local/bin/install-k3s.sh]
+
+final_message: "Cloud init finished."

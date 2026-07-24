@@ -1,10 +1,11 @@
-
+.PHONY: deploy plan validate destroy clean
 
 deploy:
-	terraform init
-	terraform fmt -check
+	terraform init -input=false
+	terraform fmt -recursive
 	terraform validate
-	terraform plan -out=tfplan
-	terraform apply tfplan
-	./scripts/wait-for-ssh.sh
-	./scripts/install-kubernetes.sh
+	terraform plan -input=false -out=tfplan
+	terraform apply -input=false tfplan
+
+clean:
+	rm -f tfplan

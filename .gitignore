@@ -19,3 +19,9 @@ crash.*.log
 *.auto.tfvars.json
 
 generated/
+
+terraform.tfvars
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json

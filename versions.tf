@@ -7,6 +7,13 @@ terraform {
       version = "3.4.0"
     }
 
+    # generate ssh
+    tls = {
+      source  = "hashicorp/tls"
+      version = "~> 4.1"
+    }
+
+    # save ssh private key locally
     local = {
       source  = "hashicorp/local"
       version = "~> 2.5"

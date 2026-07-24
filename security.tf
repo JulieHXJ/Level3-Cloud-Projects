@@ -21,7 +21,7 @@ resource "openstack_networking_secgroup_rule_v2" "icmp_ingress" {
   direction         = "ingress"
   ethertype         = "IPv4"
   protocol          = "icmp"
-  remote_ip_prefix  = "0.0.0.0/0"
+  remote_ip_prefix  = var.ssh_allowed_cidr
   security_group_id = openstack_networking_secgroup_v2.vm_security_group.id
 }
 

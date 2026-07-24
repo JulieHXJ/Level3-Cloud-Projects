@@ -59,8 +59,8 @@ variable "ssh_allowed_cidr" {
 }
 
 # k8s
-# variable "k3s_channel" {
-#   description = "K3s release channel"
-#   type        = string
-#   default     = "stable"
-# }
+variable "k3s_channel" {
+  description = "K3s release channel"
+  type        = string
+  default     = "stable"
+}
