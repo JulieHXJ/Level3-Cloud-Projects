@@ -1,27 +1,17 @@
-# Terraform working directory
-.terraform/
+# Terraform local files
+**/.terraform/
+**/*.tfstate
+**/*.tfstate.*
+**/*.tfplan
+**/crash.log
+**/terraform.tfvars
 
-# Terraform state
-*.tfstate
-*.tfstate.*
-.terraform.tfstate.lock.info
+# Kubernetes credentials
+**/kubeconfig
+**/kubeconfig.yaml
+**/kubeconfig-*
 
-# Saved Terraform plans
-*.tfplan
-tfplan
-
-# Terraform crash logs
-crash.log
-crash.*.log
-
-# Local variable files that may contain secrets
-*.auto.tfvars
-*.auto.tfvars.json
-
-generated/
-
-terraform.tfvars
-override.tf
-override.tf.json
-*_override.tf
-*_override.tf.json
+# Credentials and private keys
+**/*service-account-key*.json
+**/*.pem
+**/*.key
