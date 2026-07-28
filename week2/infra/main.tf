@@ -55,9 +55,13 @@ resource "stackit_ske_kubeconfig" "week2" {
   project_id   = var.project_id
   cluster_name = stackit_ske_cluster.week2.name
 
-  expiration     = 7200
-  refresh        = true
-  refresh_before = 600
+  # 180 days: maximum supported static kubeconfig validity
+  expiration = 15552000
+
+  refresh = true
+
+  # Refresh seven days before expiration
+  refresh_before = 604800
 }
 
 
