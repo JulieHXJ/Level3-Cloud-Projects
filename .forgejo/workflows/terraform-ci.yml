@@ -18,6 +18,11 @@ jobs:
     name: Format and validate
     runs-on: stackit-ubuntu-22
 
+    env:
+    TF_IN_AUTOMATION: "true"
+    TF_INPUT: "false"
+    STCACKIT_SERVICE_ACCOUNT_KEY: ${{ secrets.STACKIT_SERVICE_ACCOUNT_KEY }}
+
     defaults:
       run:
         working-directory: week2/infra
@@ -31,11 +36,36 @@ jobs:
         with:
           terraform_version: "1.15.8"
 
-      - name: Check Terraform formatting
-        run: terraform fmt -check -recursive
+      - name: Check credential structure
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import json
+          import os
 
-      - name: Initialize Terraform without backend
+          raw = os.environ.get("STACKIT_SERVICE_ACCOUNT_KEY")
+          if not raw:
+              raise RuntimeError("STACKIT_SERVICE_ACCOUNT_KEY secret is empty")
+
+          key = json.loads(raw)
+          credentials = key.get("credentials", {})
+
+          required = ("kid", "iss", "sub", "aud")
+          missing = [name for name in required if not credentials.get(name)]
+
+          if missing:
+              raise RuntimeError(
+                  "Missing service account fields: " + ", ".join(missing)
+              )
+
+          print("STACKIT service account key JSON is present and structurally valid")
+          PY
+        
+      - name: Terraform init
         run: terraform init -backend=false -input=false
 
-      - name: Validate Terraform configuration
+      - name: Terraform fmt
+        run: terraform fmt -check -recursive
+
+      - name: Terraform validate 
         run: terraform validate
