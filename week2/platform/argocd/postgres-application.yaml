@@ -1,0 +1,27 @@
+# creating PostgreSQL
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+
+metadata:
+  name: managed-postgres
+  namespace: argocd
+
+spec:
+  project: default
+
+  source:
+    repoURL: ssh://git@ssh.level3.git.onstackit.cloud/LEVEL3/julie.git
+    targetRevision: main
+    path: week2/platform/postgres
+    directory:
+      recurse: true
+
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: postgres-demo
+
+  syncPolicy:
+    automated:
+      enabled: true
+      selfHeal: true
+      prune: false
