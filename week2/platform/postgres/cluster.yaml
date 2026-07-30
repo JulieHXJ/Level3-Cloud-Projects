@@ -4,6 +4,8 @@ kind: Cluster
 metadata:
   name: managed-postgres
   namespace: postgres-demo
+  labels:
+    environment: learning
 
 spec:
   instances: 3
@@ -22,5 +24,4 @@ spec:
     size: 5Gi
     storageClass: premium-perf1-stackit
 
-  lables:
-    environment: learning
+  
