@@ -40,6 +40,9 @@ jobs:
       # STACKIT Provider authentication
       STACKIT_SERVICE_ACCOUNT_KEY_PATH: /tmp/stackit-service-account-key.json
 
+      TF_VAR_project_id: ${{ secrets.STACKIT_PROJECT_ID }}
+
+
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
