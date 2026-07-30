@@ -4,12 +4,12 @@ on:
   push:
     paths:
       - "week2/infra/**"
-      - ".forgejo/workflows/terraform-ci.yml"
+      - ".forgejo/workflows/terraform-ci.yaml"
 
   pull_request:
     paths:
       - "week2/infra/**"
-      - ".forgejo/workflows/terraform-ci.yml"
+      - ".forgejo/workflows/terraform-ci.yaml"
 
   workflow_dispatch:
 
