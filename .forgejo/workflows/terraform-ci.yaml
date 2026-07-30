@@ -44,6 +44,12 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      - name: Install Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.15.8"
+          terraform_wrapper: false
+
       - name: Create STACKIT credentials file
         env:
           STACKIT_KEY_JSON: ${{ secrets.STACKIT_SERVICE_ACCOUNT_KEY }}
@@ -54,13 +60,10 @@ jobs:
 
           test -s "$STACKIT_SERVICE_ACCOUNT_KEY_PATH"
 
-      - name: Show Terraform version
-        run: terraform version
-
       - name: Terraform init
         run: terraform init -input=false
 
-      - name: Terraform format
+      - name: Terraform format check
         run: terraform fmt -check -recursive
 
       - name: Terraform validate
