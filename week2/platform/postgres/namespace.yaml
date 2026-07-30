@@ -1,0 +1,5 @@
+# namespace for grouping up SQL pods
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: postgres-demo

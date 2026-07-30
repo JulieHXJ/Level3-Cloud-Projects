@@ -1,0 +1,82 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: psql-client
+  namespace: postgres-demo
+  labels:
+    app: psql-client
+spec:
+  replicas: 1
+
+  selector:
+    matchLabels:
+      app: psql-client
+
+  template:
+    metadata:
+      labels:
+        app: psql-client
+
+    spec:
+      containers:
+        - name: psql-client
+          image: postgres:18-alpine
+
+          # Keep the client container running so we can execute psql in it.
+          command:
+            - sh
+            - -c
+            - exec tail -f /dev/null
+
+          env:
+            - name: PGHOST
+              valueFrom:
+                secretKeyRef:
+                  name: managed-postgres-app
+                  key: host
+
+            - name: PGPORT
+              valueFrom:
+                secretKeyRef:
+                  name: managed-postgres-app
+                  key: port
+
+            - name: PGUSER
+              valueFrom:
+                secretKeyRef:
+                  name: managed-postgres-app
+                  key: username
+
+            - name: PGPASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: managed-postgres-app
+                  key: password
+
+            - name: PGDATABASE
+              valueFrom:
+                secretKeyRef:
+                  name: managed-postgres-app
+                  key: dbname
+
+            - name: PGSSLMODE
+              value: require
+
+          readinessProbe:
+            exec:
+              command:
+                - sh
+                - -c
+                - pg_isready -h "$PGHOST" -p "$PGPORT" -U "$PGUSER" -d "$PGDATABASE"
+            initialDelaySeconds: 3
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 6
+
+          resources:
+            requests:
+              cpu: 20m
+              memory: 64Mi
+            limits:
+              cpu: 200m
+              memory: 256Mi

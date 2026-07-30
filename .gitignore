@@ -10,8 +10,11 @@
 **/kubeconfig
 **/kubeconfig.yaml
 **/kubeconfig-*
+**/.env
 
 # Credentials and private keys
 **/*service-account-key*.json
 **/*.pem
 **/*.key
+
+.DS_Store
