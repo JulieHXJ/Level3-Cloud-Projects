@@ -18,15 +18,6 @@ jobs:
     name: Format and validate
     runs-on: stackit-ubuntu-22
 
-    env:
-    TF_IN_AUTOMATION: "true"
-    TF_INPUT: "false"
-    STCACKIT_SERVICE_ACCOUNT_KEY: ${{ secrets.STACKIT_SERVICE_ACCOUNT_KEY }}
-
-    defaults:
-      run:
-        working-directory: week2/infra
-
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -38,6 +29,8 @@ jobs:
 
       - name: Check credential structure
         shell: bash
+        env:
+          STACKIT_SERVICE_ACCOUNT_KEY: ${{ secrets.STACKIT_SERVICE_ACCOUNT_KEY }}
         run: |
           python3 - <<'PY'
           import json
@@ -62,10 +55,22 @@ jobs:
           PY
         
       - name: Terraform init
+        working-directory: week2/infra
+        env:
+          TF_IN_AUTOMATION: "true"
+          TF_INPUT: "false"
         run: terraform init -backend=false -input=false
 
       - name: Terraform fmt
+        working-directory: week2/infra
+        env:
+          TF_IN_AUTOMATION: "true"
+          TF_INPUT: "false"
         run: terraform fmt -check -recursive
 
       - name: Terraform validate 
+        working-directory: week2/infra
+        env:
+          TF_IN_AUTOMATION: "true"
+          TF_INPUT: "false"
         run: terraform validate
