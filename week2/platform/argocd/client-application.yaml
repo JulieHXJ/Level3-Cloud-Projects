@@ -1,4 +1,4 @@
-# let argocd take over client deployment, create argocd application
+# let argocd take over client deployment, creating argocd application
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
@@ -10,10 +10,8 @@ spec:
   source:
     # git repo
     repoURL: ssh://git@ssh.level3.git.onstackit.cloud/LEVEL3/julie.git
-
     # branch
     targetRevision: main
-
     # file to read
     path: week2/platform/client
     directory:
@@ -24,8 +22,8 @@ spec:
     namespace: postgres-demo
 
   # auto sync 
-  # syncPolicy:
-  #   automated:
-  #     enabled: true
-  #     selfHeal: true
-  #     prune: false
+  syncPolicy:
+    automated:
+      enabled: true
+      selfHeal: true
+      prune: false

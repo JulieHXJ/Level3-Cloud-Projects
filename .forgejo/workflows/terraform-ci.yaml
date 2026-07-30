@@ -1,0 +1,80 @@
+name: Terraform CI
+
+on:
+  push:
+    paths:
+      - "week2/infra/**"
+      - ".forgejo/workflows/terraform-ci.yml"
+
+  pull_request:
+    paths:
+      - "week2/infra/**"
+      - ".forgejo/workflows/terraform-ci.yml"
+
+  workflow_dispatch:
+
+concurrency:
+  group: terraform-week2-infra
+  cancel-in-progress: false
+
+jobs:
+  terraform-check:
+    name: Format and validate
+    runs-on: stackit-ubuntu-22
+
+
+    defaults:
+      run:
+        shell: bash
+        working-directory: week2/infra
+
+    env:
+      TF_IN_AUTOMATION: "true"
+      TF_INPUT: "false"
+
+      # Remote state credentials
+      AWS_ACCESS_KEY_ID: ${{ secrets.TF_STATE_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.TF_STATE_SECRET_ACCESS_KEY }}
+      AWS_REGION: eu01
+
+      # STACKIT Provider authentication
+      STACKIT_SERVICE_ACCOUNT_KEY_PATH: /tmp/stackit-service-account-key.json
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Create STACKIT credentials file
+        env:
+          STACKIT_KEY_JSON: ${{ secrets.STACKIT_SERVICE_ACCOUNT_KEY }}
+        run: |
+          umask 077
+          printf '%s' "$STACKIT_KEY_JSON" \
+            > "$STACKIT_SERVICE_ACCOUNT_KEY_PATH"
+
+          test -s "$STACKIT_SERVICE_ACCOUNT_KEY_PATH"
+
+      - name: Show Terraform version
+        run: terraform version
+
+      - name: Terraform init
+        run: terraform init -input=false
+
+      - name: Terraform format
+        run: terraform fmt -check -recursive
+
+      - name: Terraform validate
+        run: terraform validate
+
+      - name: Terraform plan
+        run: terraform plan -input=false -out=tfplan
+
+      - name: Terraform apply
+        run: terraform apply -input=false tfplan
+
+      - name: Remove temporary credentials
+        if: ${{ always() }}
+        working-directory: .
+        run: |
+          rm -f /tmp/stackit-service-account-key.json
+          rm -f week2/infra/tfplan
