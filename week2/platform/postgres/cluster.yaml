@@ -8,7 +8,7 @@ metadata:
     environment: learning
 
 spec:
-  instances: 3
+  instances: 4
 
   bootstrap:
     initdb:

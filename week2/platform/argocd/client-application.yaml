@@ -13,7 +13,7 @@ spec:
     # branch
     targetRevision: main
     # file to read
-    path: week2/platform/client
+    path: week2/platform/
     directory:
       recurse: true
 
