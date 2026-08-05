@@ -1,0 +1,25 @@
+name: API CI
+
+on:
+  push:
+    paths:
+      - "week3/api/**"
+      - ".forgejo/workflows/api-ci.yml"
+
+jobs:
+  test:
+    runs-on: ubuntu-20
+
+    defaults:
+      run:
+        working-directory: week3/api
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Run Go tests
+        run: go test ./...
+
+      - name: Build API
+        run: go build -o cloud3-api .
