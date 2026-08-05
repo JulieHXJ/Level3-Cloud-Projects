@@ -1,0 +1,65 @@
+paths:
+  /health:
+    get:
+      summary: Check API health
+      responses:
+        "200":
+          description: API is healthy
+
+  /instances:
+    get:
+      summary: List PostgreSQL instances
+
+    post:
+      summary: Create a PostgreSQL instance
+
+  /instances/{id}:
+    get:
+      summary: Get one PostgreSQL instance
+
+    put:
+      summary: Update a PostgreSQL instance
+
+    delete:
+      summary: Delete a PostgreSQL instance
+
+  /instances/{id}/connection:
+    get:
+      summary: Get database connection information
+
+
+
+components:
+  schemas:
+    DBInstance:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        instances:
+          type: integer
+        status:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+
+
+
+
+
+
+responses:
+  "201":
+    description: Instance created successfully
+
+  "400":
+    description: Invalid request body
+
+  "415":
+    description: Content-Type is not application/json
+
+  "500":
+    description: Failed to create instance

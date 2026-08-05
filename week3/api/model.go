@@ -19,3 +19,14 @@ type UpdateInstanceRequest struct {
 	Name      string `json:"name"`
 	Instances int    `json:"instances"`
 }
+
+
+type ConnectionInfo struct {
+	Host     string `json:"host"`
+	Port     string `json:"port"`
+	Database string `json:"database"`
+	Username string `json:"username"`
+	Password string `json:"password"`
+	URI      string `json:"uri,omitempty"`
+
+}

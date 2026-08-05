@@ -4,26 +4,58 @@ import (
 	"encoding/json"
 	"log"
 	"net/http"
-	"strings"
+	"os"
+	"time"
 )
 
-// Local memory storage for testing.
-// Key: instance ID
-// Value: database instance
-var instances = make(map[string]DBInstance)
+// // Local memory storage for testing.
+// // Key: instance ID
+// // Value: database instance
+// var instances = make(map[string]DBInstance)
 
-// generate IDs
-var nextID int = 1
+// // generate IDs
+// var nextID int = 1
+
+type Handler struct {
+	store InstanceStore
+}
+
+func NewHandler(storage InstanceStore) *Handler {
+	return &Handler{
+		store: storage,
+	}
+}
 
 func main() {
+	// CloudNativePG Cluster CR namespace。
+	namespace := os.Getenv("DB_NAMESPACE")
+	if namespace == "" {
+		namespace = "postgres-demo"
+	}
 
-	// register router
-	http.HandleFunc("/health", healthHandler)
-	http.HandleFunc("/instances", instancesHandler)    //GET POST /instance
-	http.HandleFunc("/instances/", instancesIDHandler) //Get DELETE PUT /instances/{id}
+	// create Kubernetes client save into InstanceStorage
+	store, err := NewKubeStorage(namespace)
+	if err != nil {
+		log.Fatal("failed to create Kubernetes storage: ", err)
+	}
+
+	// mstorage := NewMemoryStorage()
+	handler := NewHandler(store)
+
+	// use servermux, register router
+	mux := http.NewServeMux()
+	mux.HandleFunc("/health", healthHandler)
+	mux.HandleFunc("/instances", handler.instancesHandler)    //GET POST /instance
+	mux.HandleFunc("/instances/", handler.instancesIDHandler) //Get DELETE PUT /instances/{id}
+
+	server := &http.Server{
+		Addr:              ":8080",
+		Handler:           mux,
+		ReadHeaderTimeout: 5 * time.Second,
+	}
 
 	log.Println("Server is listening to http://localhost:8080")
-	err := http.ListenAndServe(":8080", nil)
+	err = server.ListenAndServe()
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -39,52 +71,13 @@ func healthHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK) //status code
-
-	_, err := w.Write([]byte(`{"status":"ok"}`)) // write into response body, returns written bytes and error
-	if err != nil {
-		log.Println("failed to write health response:", err)
-	}
-
+	writeJSON(w, http.StatusOK, map[string]string{
+		"status": "ok",
+	},
+	)
 }
 
-// GET & POST wrapper
-func instancesHandler(w http.ResponseWriter, r *http.Request) {
-	switch r.Method {
-	case http.MethodGet:
-		getInstances(w, r)
-	case http.MethodPost:
-		createInstances(w, r)
-	default:
-		printError(w, http.StatusMethodNotAllowed, "method not allowed")
-	}
-}
-
-func instancesIDHandler(w http.ResponseWriter, r *http.Request) {
-	//get id from url
-	id := strings.TrimPrefix(r.URL.Path, "/instances/")
-	if id == "" {
-		printError(w, http.StatusBadRequest, "missing instance id")
-		return
-	}
-
-	//router
-	switch r.Method {
-	case http.MethodGet:
-		getInstanceByID(w, id)
-
-	case http.MethodPut:
-		updateInstance(w, r, id)
-
-	case http.MethodDelete:
-		deleteInstance(w, id)
-
-	default:
-		printError(w, http.StatusMethodNotAllowed, "method not allowed")
-	}
-}
-
+// ---------------------Helper func ---------------
 // print JSON error with status code
 func printError(w http.ResponseWriter, status int, m string) {
 	w.Header().Set("Content-Type", "application/json")
@@ -97,5 +90,15 @@ func printError(w http.ResponseWriter, status int, m string) {
 	err := json.NewEncoder(w).Encode(response)
 	if err != nil {
 		log.Println("failed to encode error response:", err)
+	}
+}
+
+// any -> interface
+func writeJSON(w http.ResponseWriter, status int, data any) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(status)
+	err := json.NewEncoder(w).Encode(data)
+	if err != nil {
+		log.Println("failed to encode instance response:", err)
 	}
 }
