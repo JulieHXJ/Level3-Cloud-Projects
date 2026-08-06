@@ -2,24 +2,128 @@ name: API CI
 
 on:
   push:
+    branches:
+      - main
     paths:
       - "week3/api/**"
-      - ".forgejo/workflows/api-ci.yml"
+      - ".forgejo/workflows/api-ci.yaml"
+    
+    pull_request:
+    branches:
+      - main
+    paths:
+      - "week3/api/**"
+      - ".forgejo/workflows/api-ci.yaml"
+
+  workflow_dispatch:
+
+concurrency:
+  group: api-week3-${{ forgejo.ref }}
+  cancel-in-progress: false
+
+
+env:
+  REGISTRY: registry.onstackit.cloud
+  IMAGE_REPOSITORY: level3_julie/cloud3-api
+  IMAGE_TAG: ${{ forgejo.sha }} # versiong every image with a commit
+
 
 jobs:
-  test:
-    runs-on: ubuntu-20
+  api-ci:
+    name: Test, build and publish
+    runs-on: stackit-ubuntu-22
 
     defaults:
       run:
+        shell: bash
         working-directory: week3/api
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: week3/api/go.mod
+          cache-dependency-path: week3/api/go.sum
 
       - name: Run Go tests
-        run: go test ./...
+        run: go test -v ./...
 
-      - name: Build API
-        run: go build -o cloud3-api .
+      - name: Compile API
+        run: go build ./...
+
+      - name: Check Docker availability
+        if: ${{ forgejo.ref == 'refs/heads/main' && forgejo.event_name != 'pull_request' }}
+        run: docker version
+
+      - name: Login to STACKIT Container Registry
+        if: ${{ forgejo.ref == 'refs/heads/main' && forgejo.event_name != 'pull_request' }}
+        env:
+          REGISTRY_USERNAME: ${{ secrets.STACKIT_REGISTRY_USERNAME }}
+          REGISTRY_TOKEN: ${{ secrets.STACKIT_REGISTRY_TOKEN }}
+        run: |
+          printf '%s' "$REGISTRY_TOKEN" |
+            docker login "$REGISTRY" \
+              --username "$REGISTRY_USERNAME" \
+              --password-stdin
+
+      - name: Build container image
+        if: ${{ forgejo.ref == 'refs/heads/main' && forgejo.event_name != 'pull_request' }}
+        run: |
+          docker build \
+            --tag "$REGISTRY/$IMAGE_REPOSITORY:$IMAGE_TAG" \
+            week3/api
+
+      - name: Push container image
+        if: ${{ always() && forgejo.ref == 'refs/heads/main' && forgejo.event_name != 'pull_request' }}
+        run: |
+          docker push "$REGISTRY/$IMAGE_REPOSITORY:$IMAGE_TAG"
+
+      - name: Update GitOps manifest
+        if: ${{ always() && forgejo.ref == 'refs/heads/main' && forgejo.event_name != 'pull_request' }}
+        run: |
+          IMAGE="$REGISTRY/$IMAGE_REPOSITORY:$IMAGE_TAG"
+
+          sed -i \
+            "s#image: $REGISTRY/$IMAGE_REPOSITORY:.*#image: $IMAGE#" \
+            week3/deploy/ske.yaml
+
+          grep "image:" week3/deploy/ske.yaml
+
+      - name: Commit GitOps manifest
+        if: ${{ always() && forgejo.ref == 'refs/heads/main' && forgejo.event_name != 'pull_request' }}
+        run: |
+          if git diff --quiet -- week3/deploy/ske.yaml; then
+            echo "Deployment manifest has not changed."
+            exit 0
+          fi
+
+          git config user.name "forgejo-actions"
+          git config user.email "forgejo-actions@local"
+
+          git add week3/deploy/ske.yaml
+          git commit -m "deploy(api): update image to $IMAGE_TAG"
+          git push origin HEAD:main
+      
+      # remove Registry login 
+      - name: Logout from Registry
+        if: ${{ always() && forgejo.ref == 'refs/heads/main' && forgejo.event_name != 'pull_request' }}
+        run: docker logout "$REGISTRY" || true
+
+
+
+
+# 1. 将 Git Repository 下载到 Runner
+# 2. 根据 go.mod 准备对应 Go 版本
+# 3. 检查 Runner 是否能够访问 Docker
+# 4. 运行所有 Go Unit Tests
+# 5. 检查项目是否能够成功编译
+# 6. 登录 STACKIT Container Registry
+# 7. 使用 week3/api/Dockerfile 构建镜像
+# 8. 推送镜像
+# 9. 修改 GitOps Deployment 中的镜像版本
+# 10. 将新的镜像版本提交回 Git

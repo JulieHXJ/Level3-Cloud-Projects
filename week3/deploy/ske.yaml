@@ -81,14 +81,15 @@ spec:
 
           ports:
             - name: http
-              containerPort: 8080
+              containerPort: 8080 # Go server listening to 8080
 
           env:
             - name: DB_NAMESPACE
               valueFrom:
                 fieldRef:
-                  fieldPath: metadata.namespace
+                  fieldPath: metadata.namespace  # export pod namespace into env
 
+          # check ready or not
           readinessProbe:
             httpGet:
               path: /health
@@ -97,6 +98,7 @@ spec:
             periodSeconds: 5
             timeoutSeconds: 2
 
+          # check alive
           livenessProbe:
             httpGet:
               path: /health
@@ -113,11 +115,13 @@ spec:
               cpu: 250m
               memory: 256Mi
 
+
+          # permissions
           securityContext:
             runAsNonRoot: true
             runAsUser: 65532
             runAsGroup: 65532
-            allowPrivilegeEscalation: false
+            allowPrivilegeEscalation: false # no upgrade
             readOnlyRootFilesystem: true
             capabilities:
               drop:
@@ -135,6 +139,7 @@ spec:
   selector:
     app: cloud3-api
 
+  # Service:80 → Pod:8080
   ports:
     - name: http
       port: 80

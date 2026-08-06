@@ -1,65 +1,325 @@
+openapi: 3.0.3
+
+info:
+  title: Cloud3 Managed PostgreSQL API
+  version: 0.1.0
+  description: |
+    REST API for provisioning and managing CloudNativePG PostgreSQL clusters
+    on Kubernetes.
+
+servers:
+  - url: http://localhost:8080
+    description: Local development or kubectl port-forward
+  - url: http://cloud3-api.postgres-demo.svc.cluster.local
+    description: Kubernetes cluster-internal service
+
+tags:
+  - name: Health
+  - name: Instances
+  - name: Connection
+
+
+
+# endpoints
 paths:
   /health:
     get:
+      tags: [Health]
       summary: Check API health
+      operationId: getHealth
       responses:
         "200":
-          description: API is healthy
+          description: API is running
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthResponse"
 
   /instances:
     get:
-      summary: List PostgreSQL instances
+      tags: [Instances]
+      summary: List managed PostgreSQL instances
+      operationId: listInstances
+      responses:
+        "200":
+          description: Instances were retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/DBInstance"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
 
     post:
-      summary: Create a PostgreSQL instance
+      tags: [Instances]
+      summary: Create a managed PostgreSQL instance
+      operationId: createInstance
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateInstanceRequest"
+            example:
+              name: pet-health-database
+              instances: 1
+      responses:
+        "201":
+          description: Cluster custom resource was created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DBInstance"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "415":
+          $ref: "#/components/responses/UnsupportedMediaType"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+
+
+
 
   /instances/{id}:
+    parameters:
+      - $ref: "#/components/parameters/InstanceID"
+
+
     get:
-      summary: Get one PostgreSQL instance
+      tags: [Instances]
+      summary: Get one managed PostgreSQL instance
+      operationId: getInstance
+      responses:
+        "200":
+          description: Instance was retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DBInstance"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+
 
     put:
-      summary: Update a PostgreSQL instance
+      tags: [Instances]
+      summary: Update a managed PostgreSQL instance
+      operationId: updateInstance
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateInstanceRequest"
+            example:
+              name: pet-health-database-production
+              instances: 2
+      responses:
+        "200":
+          description: Instance was updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DBInstance"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "415":
+          $ref: "#/components/responses/UnsupportedMediaType"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+
 
     delete:
-      summary: Delete a PostgreSQL instance
+      tags: [Instances]
+      summary: Delete a managed PostgreSQL instance
+      operationId: deleteInstance
+      responses:
+        "204":
+          description: Instance was deleted successfully
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+
+
+
 
   /instances/{id}/connection:
+    parameters:
+      - $ref: "#/components/parameters/InstanceID"
+
     get:
-      summary: Get database connection information
+      tags: [Connection]
+      summary: Get PostgreSQL connection information
+      description: |
+        Reads the CloudNativePG read-write Service and application Secret.
+        The returned host is intended for clients running inside the
+        Kubernetes cluster.
+      operationId: getInstanceConnection
+      responses:
+        "200":
+          description: Connection information was retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ConnectionInfo"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          description: The operator has not created the Service or Secret yet
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              example:
+                error: connection information is not ready
+        "500":
+          $ref: "#/components/responses/InternalServerError"
 
 
-
+# schema
 components:
+  parameters:
+    InstanceID:
+      name: id
+      in: path
+      required: true
+      description: Kubernetes metadata.name of the CloudNativePG Cluster
+      schema:
+        type: string
+        example: db-k9zhw
+
+
+
   schemas:
+    HealthResponse:
+      type: object
+      required: [status]
+      properties:
+        status:
+          type: string
+          example: ok
+   
     DBInstance:
       type: object
+      required: [id, name, instances, status, createdAt]
       properties:
         id:
           type: string
+          example: db-k9zhw
         name:
           type: string
+          example: pet-health-database
         instances:
           type: integer
+          minimum: 1
+          example: 2
         status:
           type: string
+          example: Cluster in healthy state
         createdAt:
           type: string
           format: date-time
+          example: "2026-08-05T11:36:16Z"
+      
+    
+    CreateInstanceRequest:
+      type: object
+      required: [name, instances]
+      additionalProperties: false
+      properties:
+        name:
+          type: string
+          minLength: 1
+          example: pet-health-database
+        instances:
+          type: integer
+          minimum: 1
+          example: 1
+
+    UpdateInstanceRequest:
+      type: object
+      required: [name, instances]
+      additionalProperties: false
+      properties:
+        name:
+          type: string
+          minLength: 1
+          example: pet-health-database-production
+        instances:
+          type: integer
+          minimum: 1
+          example: 2
+
+    ConnectionInfo:
+      type: object
+      required: [host, port, database, username, password]
+      properties:
+        host:
+          type: string
+          description: Cluster-internal read-write Service host
+          example: db-k9zhw-rw
+        port:
+          type: string
+        database:
+          type: string
+        username:
+          type: string
+        password:
+          type: string
+          format: password
+          description: Generated database password; do not log or commit it
+        uri:
+          type: string
+          format: uri
+          description: PostgreSQL connection URI
+          example: postgresql://app:REDACTED@db-k9zhw-rw.postgres-demo:5432/app
 
 
+    ErrorResponse:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: string
+          example: instance not found
 
+# status code
+  responses:
+    BadRequest:
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+          example:
+            error: invalid request body
 
+    UnsupportedMediaType:
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+          example:
+            error: Content-Type is not application/json
 
+    NotFound:
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+          example:
+            error: instance not found
 
-responses:
-  "201":
-    description: Instance created successfully
-
-  "400":
-    description: Invalid request body
-
-  "415":
-    description: Content-Type is not application/json
-
-  "500":
-    description: Failed to create instance
+    InternalServerError:
+      description: An internal operation failed
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+          example:
+            error: internal server error

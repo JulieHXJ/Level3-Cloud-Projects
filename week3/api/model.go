@@ -20,6 +20,11 @@ type UpdateInstanceRequest struct {
 	Instances int    `json:"instances"`
 }
 
+//PATCH
+type PatchInstanceRequest struct {
+	Name      *string `json:"name,omitempty"`
+	Instances *int    `json:"instances,omitempty"`
+}
 
 type ConnectionInfo struct {
 	Host     string `json:"host"`
