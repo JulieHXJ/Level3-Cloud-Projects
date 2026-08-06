@@ -33,11 +33,6 @@ jobs:
     name: Test, build and publish
     runs-on: stackit-ubuntu-22
 
-    defaults:
-      run:
-        shell: bash
-        working-directory: week3/api
-
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -51,17 +46,19 @@ jobs:
           cache-dependency-path: week3/api/go.sum
 
       - name: Run Go tests
+        working-directory: week3/api
         run: go test -v ./...
 
       - name: Compile API
+        working-directory: week3/api
         run: go build ./...
 
       - name: Check Docker availability
-        if: ${{ forgejo.ref == 'refs/heads/main' && forgejo.event_name != 'pull_request' }}
+        if: ${{ success() && forgejo.ref == 'refs/heads/main' && forgejo.event_name != 'pull_request' }}
         run: docker version
 
       - name: Login to STACKIT Container Registry
-        if: ${{ forgejo.ref == 'refs/heads/main' && forgejo.event_name != 'pull_request' }}
+        if: ${{ success() && forgejo.ref == 'refs/heads/main' && forgejo.event_name != 'pull_request' }}
         env:
           REGISTRY_USERNAME: ${{ secrets.STACKIT_REGISTRY_USERNAME }}
           REGISTRY_TOKEN: ${{ secrets.STACKIT_REGISTRY_TOKEN }}
@@ -72,19 +69,19 @@ jobs:
               --password-stdin
 
       - name: Build container image
-        if: ${{ forgejo.ref == 'refs/heads/main' && forgejo.event_name != 'pull_request' }}
+        if: ${{ success() && forgejo.ref == 'refs/heads/main' && forgejo.event_name != 'pull_request' }}
         run: |
           docker build \
             --tag "$REGISTRY/$IMAGE_REPOSITORY:$IMAGE_TAG" \
             week3/api
 
       - name: Push container image
-        if: ${{ always() && forgejo.ref == 'refs/heads/main' && forgejo.event_name != 'pull_request' }}
+        if: ${{ success() && forgejo.ref == 'refs/heads/main' && forgejo.event_name != 'pull_request' }}
         run: |
           docker push "$REGISTRY/$IMAGE_REPOSITORY:$IMAGE_TAG"
 
       - name: Update GitOps manifest
-        if: ${{ always() && forgejo.ref == 'refs/heads/main' && forgejo.event_name != 'pull_request' }}
+        if: ${{ success() && forgejo.ref == 'refs/heads/main' && forgejo.event_name != 'pull_request' }}
         run: |
           IMAGE="$REGISTRY/$IMAGE_REPOSITORY:$IMAGE_TAG"
 
@@ -95,7 +92,7 @@ jobs:
           grep "image:" week3/deploy/ske.yaml
 
       - name: Commit GitOps manifest
-        if: ${{ always() && forgejo.ref == 'refs/heads/main' && forgejo.event_name != 'pull_request' }}
+        if: ${{ success() && forgejo.ref == 'refs/heads/main' && forgejo.event_name != 'pull_request' }}
         run: |
           if git diff --quiet -- week3/deploy/ske.yaml; then
             echo "Deployment manifest has not changed."
