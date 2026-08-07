@@ -25,7 +25,7 @@ spec:
     syncOptions:
       - CreateNamespace=true
 
-
+# Defina
 # Git 仓库在哪里
 # 需要监控哪个目录
 # 部署到哪个 Kubernetes Cluster

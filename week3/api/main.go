@@ -20,6 +20,13 @@ type Handler struct {
 	store InstanceStore
 }
 
+const (
+	apiV1Prefix   = "/api/v1"
+	instancesPath = apiV1Prefix + "/instances"
+	usersPath     = apiV1Prefix + "/users"
+	petsPath      = apiV1Prefix + "/pets"
+)
+
 func NewHandler(storage InstanceStore) *Handler {
 	return &Handler{
 		store: storage,
@@ -45,8 +52,14 @@ func main() {
 	// use servermux, register router
 	mux := http.NewServeMux()
 	mux.HandleFunc("/health", healthHandler)
-	mux.HandleFunc("/instances", handler.instancesHandler)    //GET POST /instance
-	mux.HandleFunc("/instances/", handler.instancesIDHandler) //Get DELETE PUT /instances/{id}
+	mux.HandleFunc(instancesPath, handler.instancesHandler)       //GET POST /instance
+	mux.HandleFunc(instancesPath+"/", handler.instancesIDHandler) //Get DELETE PUT /instances/{id}
+
+	// mux.HandleFunc(usersPath, handler.userHandler)
+	// mux.HandleFunc(usersPath+"/", handler.userByIDHandler)
+
+	// mux.HandleFunc(petsPath, handler.petHandler)
+	// mux.HandleFunc(petsPath+"/", handler.petByIDHandler)
 
 	server := &http.Server{
 		Addr:              ":8080",

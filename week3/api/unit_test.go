@@ -9,7 +9,6 @@ import (
 	"testing"
 )
 
-
 const testCreatedAt = "2026-08-05T11:36:16Z"
 
 type testStore struct {
@@ -20,12 +19,12 @@ type testStore struct {
 func newTestStore() *testStore {
 	return &testStore{
 		MemoryStorage: NewMemoryStorage(),
-		connections: make(map[string]ConnectionInfo),
+		connections:   make(map[string]ConnectionInfo),
 	}
 }
 
-//get Service & Secret
-func (s *testStore) GetConnection(ctx context.Context, id string) (ConnectionInfo, error){
+// get Service & Secret
+func (s *testStore) GetConnection(ctx context.Context, id string) (ConnectionInfo, error) {
 	if _, err := s.Get(ctx, id); err != nil {
 		return ConnectionInfo{}, err
 	}
@@ -38,7 +37,7 @@ func (s *testStore) GetConnection(ctx context.Context, id string) (ConnectionInf
 	return connection, nil
 }
 
-//router
+// router
 func newTestMux(store InstanceStore) *http.ServeMux {
 	handler := NewHandler(store)
 
@@ -68,7 +67,6 @@ func performRequest(t *testing.T, handler http.Handler, method string, path stri
 	handler.ServeHTTP(recorder, request) // pass request to router and write response to recorder
 	return recorder
 }
-
 
 // convert JSON from response to GO struct
 func decodeResponse[T any](t *testing.T, recorder *httptest.ResponseRecorder) T {
@@ -101,7 +99,7 @@ func createTestInstance(t *testing.T, store InstanceStore, name string, instance
 	return instance
 }
 
-//GET /health
+// GET /health
 func TestHealthSuccess(t *testing.T) {
 	recorder := performRequest(
 		t,
@@ -191,7 +189,7 @@ func TestCreateInstanceInvalidJSON(t *testing.T) {
 		newTestMux(newTestStore()),
 		http.MethodPost,
 		"/instances",
-		[]byte(`{"name":`), 
+		[]byte(`{"name":`),
 		"application/json",
 	)
 
@@ -281,7 +279,6 @@ func TestGetInstanceNotFound(t *testing.T) {
 	}
 }
 
-
 // PUT /instance/{id}
 func TestUpdateInstanceSuccess(t *testing.T) {
 	store := newTestStore()
@@ -331,10 +328,10 @@ func TestDeleteInstanceSuccess(t *testing.T) {
 	)
 
 	//check status code = 204
-	if recorder.Code != http.StatusNoContent {
+	if recorder.Code != http.StatusAccepted {
 		t.Fatalf(
 			"expected status %d, got %d; body=%s",
-			http.StatusNoContent,
+			http.StatusAccepted,
 			recorder.Code,
 			recorder.Body.String(),
 		)

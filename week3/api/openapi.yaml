@@ -139,8 +139,8 @@ paths:
       summary: Delete a managed PostgreSQL instance
       operationId: deleteInstance
       responses:
-        "204":
-          description: Instance was deleted successfully
+        "202":
+          description: Instance deletion request accepted
         "404":
           $ref: "#/components/responses/NotFound"
         "500":

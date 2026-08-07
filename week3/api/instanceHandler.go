@@ -92,7 +92,7 @@ func (h *Handler) deleteInstance(w http.ResponseWriter, r *http.Request, id stri
 
 	}
 
-	w.WriteHeader(http.StatusNoContent)
+	w.WriteHeader(http.StatusAccepted)
 }
 
 // PUT /instances/{id}
