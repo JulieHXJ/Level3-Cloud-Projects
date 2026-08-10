@@ -2,16 +2,13 @@ package main
 
 import (
 	"context"
-	"errors"
+	"strings"
 	"strconv"
 	"sync"
 	"time"
+	"fmt"
 )
 
-var (
-	ErrInstanceNotFound = errors.New("instance not found")
-	ErrInvalidInstance  = errors.New("invalid instance")
-)
 
 // map
 type MemoryStorage struct {
@@ -89,8 +86,8 @@ func (s *MemoryStorage) Create(ctx context.Context, r CreateInstanceRequest) (DB
 	return instance, nil
 }
 
-// PUT /instances/{id}
-func (s *MemoryStorage) Update(ctx context.Context, id string, r UpdateInstanceRequest) (DBInstance, error) {
+// PATCH /instances/{id}
+func (s *MemoryStorage) Update(ctx context.Context, id string, r PatchInstanceRequest) (DBInstance, error) {
 	if err := ctx.Err(); err != nil {
 		return DBInstance{}, err
 	}
