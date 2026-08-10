@@ -1,4 +1,4 @@
-module cloud3-api
+module cloud4-api
 
 go 1.25.12
 

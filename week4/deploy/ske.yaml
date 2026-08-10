@@ -1,0 +1,146 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: cloud4-api
+  namespace: postgres-demo
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: cloud4-api
+  namespace: postgres-demo
+rules:
+  # Allow the API to manage CloudNativePG Cluster CRs.
+  - apiGroups:
+      - postgresql.cnpg.io
+    resources:
+      - clusters
+    verbs:
+      - get
+      - list
+      - create
+      - update
+      - patch
+      - delete
+
+  # Allow the connection endpoint to read Services and Secrets.
+  - apiGroups:
+      - ""
+    resources:
+      - services
+      - secrets
+    verbs:
+      - get
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: cloud4-api
+  namespace: postgres-demo
+subjects:
+  - kind: ServiceAccount
+    name: cloud4-api
+    namespace: postgres-demo
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: cloud4-api
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: cloud4-api
+  namespace: postgres-demo
+  labels:
+    app: cloud4-api
+spec:
+  replicas: 1
+
+  selector:
+    matchLabels:
+      app: cloud4-api
+
+  template:
+    metadata:
+      labels:
+        app: cloud4-api
+
+    spec:
+      serviceAccountName: cloud4-api
+
+      imagePullSecrets:
+        - name: stackit-registry
+
+      containers:
+        - name: cloud4-api
+          image: registry.onstackit.cloud/level3_julie/cloud4-api:d23e0b7378d6e0f142d66b6adbe7035eee2d4ec4
+          imagePullPolicy: IfNotPresent
+
+          ports:
+            - name: http
+              containerPort: 8080 # Go server listening to 8080
+
+          env:
+            - name: DB_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace  # export pod namespace into env
+
+          # check ready or not
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 2
+            periodSeconds: 5
+            timeoutSeconds: 2
+
+          # check alive
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            timeoutSeconds: 2
+
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              cpu: 250m
+              memory: 256Mi
+
+
+          # permissions
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 65532
+            runAsGroup: 65532
+            allowPrivilegeEscalation: false # no upgrade
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: cloud4-api
+  namespace: postgres-demo
+spec:
+  type: ClusterIP
+
+  selector:
+    app: cloud4-api
+
+  # Service:80 → Pod:8080
+  ports:
+    - name: http
+      port: 80
+      targetPort: http
