@@ -76,7 +76,7 @@ spec:
 
       containers:
         - name: cloud3-api
-          image: registry.onstackit.cloud/level3_julie/cloud3-api:c923e45b113397dd1bb3b3eb3ae81914e82c3cee
+          image: registry.onstackit.cloud/level3_julie/cloud3-api:cd0e95c74541aa57d0c5ffb4b12deed9b0dfaef4
           imagePullPolicy: IfNotPresent
 
           ports:
