@@ -1,4 +1,4 @@
-package main
+package instance
 
 import (
 	"bytes"
@@ -42,15 +42,14 @@ func newTestMux(store InstanceStore) *http.ServeMux {
 	handler := NewHandler(store)
 
 	mux := http.NewServeMux()
-	mux.HandleFunc("/health", healthHandler)
-	mux.HandleFunc("/instances", handler.instancesHandler)
-	mux.HandleFunc("/instances/", handler.instancesIDHandler)
+	handler.RegisterRoutes(mux)
+
 	return mux
 }
 
 // simulate client request and get response
 // t - text object, for error reporting
-// method - GET、POST、PUT、DELETE
+// method - GET、POST、PATCH、DELETE
 // path - /health、/instances、/instances/1
 // body - POST  JSON
 // Content-Type: application/json
@@ -99,27 +98,6 @@ func createTestInstance(t *testing.T, store InstanceStore, name string, instance
 	return instance
 }
 
-// GET /health
-func TestHealthSuccess(t *testing.T) {
-	recorder := performRequest(
-		t,
-		newTestMux(newTestStore()),
-		http.MethodGet,
-		"/health",
-		nil,
-		"",
-	)
-
-	if recorder.Code != http.StatusOK {
-		t.Fatalf("expected status %d, got %d", http.StatusOK, recorder.Code)
-	}
-
-	response := decodeResponse[map[string]string](t, recorder)
-	if response["status"] != "ok" {
-		t.Fatalf("expected status=ok, got %q", response["status"])
-	}
-}
-
 // GET /instances
 func TestListInstancesSuccess(t *testing.T) {
 	store := newTestStore()
@@ -130,7 +108,7 @@ func TestListInstancesSuccess(t *testing.T) {
 		t,
 		newTestMux(store),
 		http.MethodGet,
-		"/instances",
+		instancesPath,
 		nil,
 		"",
 	)
@@ -156,7 +134,7 @@ func TestCreateInstanceSuccess(t *testing.T) {
 		t,
 		newTestMux(newTestStore()),
 		http.MethodPost,
-		"/instances",
+		instancesPath,
 		[]byte(`{"name":"pet-health-db","instances":1}`),
 		"application/json",
 	)
@@ -180,6 +158,57 @@ func TestCreateInstanceSuccess(t *testing.T) {
 	if instance.Instances != 1 {
 		t.Fatalf("expected instances=1, got %d", instance.Instances)
 	}
+
+	if instance.Storage != defaultStorageSize {
+		t.Fatalf(
+			"expected storage=%q, got %q",
+			defaultStorageSize,
+			instance.Storage,
+		)
+	}
+
+	if instance.CPU != defaultCPURequest {
+		t.Fatalf(
+			"expected cpu=%q, got %q",
+			defaultCPURequest,
+			instance.CPU,
+		)
+	}
+}
+
+func TestCreateInstanceWithResourcesSuccess(t *testing.T) {
+	recorder := performRequest(
+		t,
+		newTestMux(newTestStore()),
+		http.MethodPost,
+		instancesPath,
+		[]byte(`{
+			"name": "pet-health-db",
+			"instances": 2,
+			"storage": "5Gi",
+			"cpu": "500m"
+		}`),
+		"application/json",
+	)
+
+	if recorder.Code != http.StatusCreated {
+		t.Fatalf(
+			"expected status %d, got %d; body=%s",
+			http.StatusCreated,
+			recorder.Code,
+			recorder.Body.String(),
+		)
+	}
+
+	instance := decodeResponse[DBInstance](t, recorder)
+
+	if instance.Storage != "5Gi" {
+		t.Fatalf("expected storage=5Gi, got %q", instance.Storage)
+	}
+
+	if instance.CPU != "500m" {
+		t.Fatalf("expected cpu=500m, got %q", instance.CPU)
+	}
 }
 
 // POST /instance missing body
@@ -188,7 +217,7 @@ func TestCreateInstanceInvalidJSON(t *testing.T) {
 		t,
 		newTestMux(newTestStore()),
 		http.MethodPost,
-		"/instances",
+		instancesPath,
 		[]byte(`{"name":`),
 		"application/json",
 	)
@@ -209,7 +238,7 @@ func TestCreateInstanceUnsupportedMediaType(t *testing.T) {
 		t,
 		newTestMux(newTestStore()),
 		http.MethodPost,
-		"/instances",
+		instancesPath,
 		[]byte(`{"name":"pet-health-db","instances":1}`),
 		"text/plain",
 	)
@@ -236,7 +265,7 @@ func TestGetInstanceSuccess(t *testing.T) {
 		t,
 		newTestMux(store),
 		http.MethodGet,
-		"/instances/"+created.ID,
+		instancesPath+"/"+created.ID,
 		nil,
 		"",
 	)
@@ -264,7 +293,7 @@ func TestGetInstanceNotFound(t *testing.T) {
 		t,
 		newTestMux(newTestStore()),
 		http.MethodGet,
-		"/instances/missing",
+		instancesPath+"/missing",
 		nil,
 		"",
 	)
@@ -279,17 +308,21 @@ func TestGetInstanceNotFound(t *testing.T) {
 	}
 }
 
-// PUT /instance/{id}
-func TestUpdateInstanceSuccess(t *testing.T) {
+func TestPatchInstancePartialUpdateSuccess(t *testing.T) {
 	store := newTestStore()
-	created := createTestInstance(t, store, "old-name", 1)
+	created := createTestInstance(
+		t,
+		store,
+		"pet-health-db",
+		1,
+	)
 
 	recorder := performRequest(
 		t,
 		newTestMux(store),
-		http.MethodPut,
-		"/instances/"+created.ID,
-		[]byte(`{"name":"new-name","instances":2}`),
+		http.MethodPatch,
+		instancesPath+"/"+created.ID,
+		[]byte(`{"storage":"5Gi"}`),
 		"application/json",
 	)
 
@@ -302,14 +335,80 @@ func TestUpdateInstanceSuccess(t *testing.T) {
 		)
 	}
 
-	updated := decodeResponse[DBInstance](t, recorder)
+	instance := decodeResponse[DBInstance](t, recorder)
 
-	//check name and instance
-	if updated.Name != "new-name" {
-		t.Fatalf("expected name new-name, got %q", updated.Name)
+	if instance.Storage != "5Gi" {
+		t.Fatalf("expected storage=5Gi, got %q", instance.Storage)
 	}
-	if updated.Instances != 2 {
-		t.Fatalf("expected instances=2, got %d", updated.Instances)
+
+	// 没有出现在 PATCH body 中的字段必须保持不变。
+	if instance.Name != created.Name {
+		t.Fatalf(
+			"expected name to remain %q, got %q",
+			created.Name,
+			instance.Name,
+		)
+	}
+
+	if instance.Instances != created.Instances {
+		t.Fatalf(
+			"expected instances to remain %d, got %d",
+			created.Instances,
+			instance.Instances,
+		)
+	}
+
+	if instance.CPU != created.CPU {
+		t.Fatalf(
+			"expected cpu to remain %q, got %q",
+			created.CPU,
+			instance.CPU,
+		)
+	}
+}
+
+func TestPatchInstanceRejectsStorageDecrease(t *testing.T) {
+	store := newTestStore()
+	created := createTestInstance(
+		t,
+		store,
+		"pet-health-db",
+		1,
+	)
+
+	firstPatch := performRequest(
+		t,
+		newTestMux(store),
+		http.MethodPatch,
+		instancesPath+"/"+created.ID,
+		[]byte(`{"storage":"10Gi"}`),
+		"application/json",
+	)
+
+	if firstPatch.Code != http.StatusOK {
+		t.Fatalf(
+			"failed to prepare instance: status=%d body=%s",
+			firstPatch.Code,
+			firstPatch.Body.String(),
+		)
+	}
+
+	recorder := performRequest(
+		t,
+		newTestMux(store),
+		http.MethodPatch,
+		instancesPath+"/"+created.ID,
+		[]byte(`{"storage":"5Gi"}`),
+		"application/json",
+	)
+
+	if recorder.Code != http.StatusBadRequest {
+		t.Fatalf(
+			"expected status %d, got %d; body=%s",
+			http.StatusBadRequest,
+			recorder.Code,
+			recorder.Body.String(),
+		)
 	}
 }
 
@@ -322,7 +421,7 @@ func TestDeleteInstanceSuccess(t *testing.T) {
 		t,
 		newTestMux(store),
 		http.MethodDelete,
-		"/instances/"+created.ID,
+		instancesPath+"/"+created.ID,
 		nil,
 		"",
 	)
@@ -351,7 +450,7 @@ func TestDeleteInstanceNotFound(t *testing.T) {
 		t,
 		newTestMux(newTestStore()),
 		http.MethodDelete,
-		"/instances/missing",
+		instancesPath+"/missing",
 		nil,
 		"",
 	)
@@ -386,7 +485,7 @@ func TestGetConnectionSuccess(t *testing.T) {
 		t,
 		newTestMux(store),
 		http.MethodGet,
-		"/instances/"+created.ID+"/connection",
+		instancesPath+"/"+created.ID+"/connection",
 		nil,
 		"",
 	)
@@ -421,7 +520,7 @@ func TestGetConnectionNotReady(t *testing.T) {
 		t,
 		newTestMux(store),
 		http.MethodGet,
-		"/instances/"+created.ID+"/connection",
+		instancesPath+"/"+created.ID+"/connection",
 		nil,
 		"",
 	)

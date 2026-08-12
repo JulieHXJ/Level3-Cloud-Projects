@@ -1,16 +1,17 @@
 SHELL := /bin/bash
 
 GO ?= go
-APP := cloud3-api
+APP := cloud4-api
 
-.PHONY: help generate test run build fmt tidy check swagger clean
+.PHONY: help generate test run build fmt tidy check swagger clean hash-password
 
 help:
 	@echo "make generate  Generate Go code from openapi.yaml"
 	@echo "make test      Run all Go tests"
 	@echo "make run       Start the API locally"
-	@echo "make swagger   Start Swagger UI on port 8081"
 	@echo "make build     Build the Go binary"
+	@echo "make swagger   Start Swagger UI on port 8081"
+	@echo "make hash-password  Generate a bcrypt password hash"
 	@echo "make check     Format, generate, test and build"
 
 
@@ -46,6 +47,9 @@ swagger:
 		-e SWAGGER_JSON=/spec/openapi.yaml \
 		-v "$(CURDIR)/openapi.yaml:/spec/openapi.yaml:ro" \
 		docker.io/swaggerapi/swagger-ui
+
+hash-password:
+	$(GO) run ./cmd/hash-password
 
 clean:
 	rm -f bin/$(APP)

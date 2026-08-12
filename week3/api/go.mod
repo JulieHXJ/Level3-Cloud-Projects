@@ -4,8 +4,10 @@ go 1.25.12
 
 require (
 	github.com/getkin/kin-openapi v0.142.0
+	github.com/golang-jwt/jwt/v5 v5.3.1
 	github.com/labstack/echo/v4 v4.15.4
 	github.com/oapi-codegen/runtime v1.6.0
+	golang.org/x/crypto v0.54.0
 	k8s.io/apimachinery v0.35.6
 	k8s.io/client-go v0.35.6
 )
@@ -45,7 +47,6 @@ require (
 	github.com/x448/float16 v0.8.4 // indirect
 	go.yaml.in/yaml/v2 v2.4.3 // indirect
 	go.yaml.in/yaml/v3 v3.0.4 // indirect
-	golang.org/x/crypto v0.54.0 // indirect
 	golang.org/x/mod v0.38.0 // indirect
 	golang.org/x/net v0.57.0 // indirect
 	golang.org/x/oauth2 v0.30.0 // indirect

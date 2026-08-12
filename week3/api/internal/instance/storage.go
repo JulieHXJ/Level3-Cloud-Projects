@@ -1,13 +1,13 @@
-package main
+package instance
 
 import (
 	"context"
 	"errors"
-)	
+)
 
 var (
-	ErrInstanceNotFound  = errors.New("instance not found")
-	ErrInvalidInstance   = errors.New("invalid instance")
+	ErrInstanceNotFound   = errors.New("instance not found")
+	ErrInvalidInstance    = errors.New("invalid instance")
 	ErrConnectionNotReady = errors.New("connection information not ready")
 )
 
@@ -25,7 +25,6 @@ type InstanceStore interface {
 	Delete(ctx context.Context, id string) error
 }
 
-
 type ConnectionStore interface {
-	GetConnection (ctx context.Context, id string) (ConnectionInfo, error)
+	GetConnection(ctx context.Context, id string) (ConnectionInfo, error)
 }

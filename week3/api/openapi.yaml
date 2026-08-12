@@ -10,18 +10,20 @@ info:
 servers:
   - url: http://localhost:8080
     description: Local development or kubectl port-forward
-  - url: http://cloud3-api.postgres-demo.svc.cluster.local
+  - url: http://cloud4-api.postgres-demo.svc.cluster.local
     description: Kubernetes cluster-internal service
+
+
+tags:
+  - name: Health
+  - name: Authentication
+  - name: Instances
+  - name: Connection
+  - name: Credentials
 
 # all endpoints required token by default 
 security:
   - bearerAuth: []
-
-tags:
-  - name: Health
-  - name: Instances
-  - name: Connection
-  - name: Authentication
 
 # endpoints
 paths:

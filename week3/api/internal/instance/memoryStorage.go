@@ -1,14 +1,13 @@
-package main
+package instance
 
 import (
 	"context"
-	"strings"
+	"fmt"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
-	"fmt"
 )
-
 
 // map
 type MemoryStorage struct {
@@ -69,16 +68,54 @@ func (s *MemoryStorage) Create(ctx context.Context, r CreateInstanceRequest) (DB
 		return DBInstance{}, err
 	}
 
-	// prepare id and create instance
+	// prepare params and validate
+	name := strings.TrimSpace(r.Name)
+	if name == "" {
+		return DBInstance{}, fmt.Errorf(
+			"%w: name is required",
+			ErrInvalidInstance,
+		)
+	}
+
+	if r.Instances < 1 {
+		return DBInstance{}, fmt.Errorf(
+			"%w: instances must be at least 1",
+			ErrInvalidInstance,
+		)
+	}
+
+	storage := defaultStorageSize
+	if r.Storage != nil {
+		value, err := normalizePositiveQuantity(*r.Storage, "storage")
+		if err != nil {
+			return DBInstance{}, err
+		}
+		storage = value
+	}
+
+	cpu := defaultCPURequest
+	if r.CPU != nil {
+		value, err := normalizePositiveQuantity(*r.CPU, "cpu")
+		if err != nil {
+			return DBInstance{}, err
+		}
+		cpu = value
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
 	id := strconv.Itoa(s.nextID)
 	s.nextID++
 
 	instance := DBInstance{
 		ID:        id,
-		Name:      r.Name,
+		Name:      name,
 		Instances: r.Instances,
+		Storage:   storage,
+		CPU:       cpu,
 		Status:    "pending",
-		CreatedAt: time.Now().Format("2006-01-02T15:04:05"),
+		CreatedAt: time.Now().UTC().Format(time.RFC3339),
 	}
 
 	//save to map and return status
@@ -87,19 +124,65 @@ func (s *MemoryStorage) Create(ctx context.Context, r CreateInstanceRequest) (DB
 }
 
 // PATCH /instances/{id}
-func (s *MemoryStorage) Update(ctx context.Context, id string, r PatchInstanceRequest) (DBInstance, error) {
+func (s *MemoryStorage) Patch(ctx context.Context, id string, r PatchInstanceRequest) (DBInstance, error) {
 	if err := ctx.Err(); err != nil {
 		return DBInstance{}, err
 	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
 
 	instance, exists := s.instances[id]
 	if !exists {
 		return DBInstance{}, ErrInstanceNotFound
 	}
 
-	//update
-	instance.Name = r.Name
-	instance.Instances = r.Instances
+	if r.Name != nil {
+		name := strings.TrimSpace(*r.Name)
+		if name == "" {
+			return DBInstance{}, fmt.Errorf(
+				"%w: name cannot be empty",
+				ErrInvalidInstance,
+			)
+		}
+		instance.Name = name
+	}
+
+	if r.Instances != nil {
+		if *r.Instances < 1 {
+			return DBInstance{}, fmt.Errorf(
+				"%w: instances must be at least 1",
+				ErrInvalidInstance,
+			)
+		}
+		instance.Instances = *r.Instances
+	}
+
+	if r.Storage != nil {
+		storage, err := normalizePositiveQuantity(*r.Storage, "storage")
+		if err != nil {
+			return DBInstance{}, err
+		}
+
+		currentStorage := instance.Storage
+		if currentStorage == "" {
+			currentStorage = defaultStorageSize
+		}
+
+		if err := validateStorageExpansion(currentStorage, storage); err != nil {
+			return DBInstance{}, err
+		}
+
+		instance.Storage = storage
+	}
+
+	if r.CPU != nil {
+		cpu, err := normalizePositiveQuantity(*r.CPU, "cpu")
+		if err != nil {
+			return DBInstance{}, err
+		}
+		instance.CPU = cpu
+	}
 
 	s.instances[id] = instance
 	return instance, nil

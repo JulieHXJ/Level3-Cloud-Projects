@@ -1,20 +1,20 @@
-package main
+package instance
 
 import (
 	"context"
 	"fmt"
+	"strconv"
 	"strings"
 	"time"
-	"strconv"
 
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/dynamic"
+	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
-	"k8s.io/client-go/kubernetes"
 )
 
 const (
@@ -22,7 +22,6 @@ const (
 	managedByLabelValue = "paas-api"
 
 	displayNameAnnotation = "paas-api/name"
-	defaultStorageSize    = "1Gi"
 )
 
 // GVR = Group, Version, Resource.
@@ -36,9 +35,9 @@ var clusterGVR = schema.GroupVersionResource{
 }
 
 type KubeStorage struct {
-	client    	dynamic.Interface  // cluster CR
-	coreClient	kubernetes.Interface  //Servic， Secret for GET /instances/{id}/connection
-	namespace 	string
+	client     dynamic.Interface    // cluster CR
+	coreClient kubernetes.Interface //Servic， Secret for GET /instances/{id}/connection
+	namespace  string
 }
 
 // constructor
@@ -67,11 +66,10 @@ func NewKubeStorage(namespace string) (*KubeStorage, error) {
 		)
 	}
 
-
 	return &KubeStorage{
-		client:    client,
+		client:     client,
 		coreClient: coreClient,
-		namespace: namespace,
+		namespace:  namespace,
 	}, nil
 }
 
@@ -143,8 +141,6 @@ func (s *KubeStorage) Get(ctx context.Context, id string) (DBInstance, error) {
 	return clusterToDBInstance(cluster)
 }
 
-
-
 func (s *KubeStorage) GetConnection(ctx context.Context, id string) (ConnectionInfo, error) {
 	_, err := s.getManagedCluster(ctx, id)
 	if err != nil {
@@ -179,7 +175,7 @@ func (s *KubeStorage) GetConnection(ctx context.Context, id string) (ConnectionI
 		)
 	}
 
-	// get host & port from  CloudNativePG Secret 
+	// get host & port from  CloudNativePG Secret
 	// take secret priorially
 	if value := secretData(secret.Data, "host"); value != "" {
 		host = value
@@ -199,12 +195,9 @@ func (s *KubeStorage) GetConnection(ctx context.Context, id string) (ConnectionI
 	}, nil
 }
 
-
-
 func (s *KubeStorage) Create(ctx context.Context, request CreateInstanceRequest) (DBInstance, error) {
-	request.Name = strings.TrimSpace(request.Name)
-
-	if request.Name == "" {
+	name := strings.TrimSpace(request.Name)
+	if name == "" {
 		return DBInstance{}, fmt.Errorf(
 			"%w: name is required",
 			ErrInvalidInstance,
@@ -216,6 +209,24 @@ func (s *KubeStorage) Create(ctx context.Context, request CreateInstanceRequest)
 			"%w: instances must be at least 1",
 			ErrInvalidInstance,
 		)
+	}
+
+	storage := defaultStorageSize
+	if request.Storage != nil {
+		value, err := normalizePositiveQuantity(*request.Storage, "storage")
+		if err != nil {
+			return DBInstance{}, err
+		}
+		storage = value
+	}
+
+	cpu := defaultCPURequest
+	if request.CPU != nil {
+		value, err := normalizePositiveQuantity(*request.CPU, "cpu")
+		if err != nil {
+			return DBInstance{}, err
+		}
+		cpu = value
 	}
 
 	cluster := &unstructured.Unstructured{
@@ -231,7 +242,7 @@ func (s *KubeStorage) Create(ctx context.Context, request CreateInstanceRequest)
 				},
 
 				"annotations": map[string]interface{}{
-					displayNameAnnotation: request.Name,
+					displayNameAnnotation: name,
 				},
 			},
 
@@ -239,7 +250,13 @@ func (s *KubeStorage) Create(ctx context.Context, request CreateInstanceRequest)
 				"instances": int64(request.Instances),
 
 				"storage": map[string]interface{}{
-					"size": defaultStorageSize,
+					"size": storage,
+				},
+
+				"resources": map[string]interface{}{
+					"requests": map[string]interface{}{
+						"cpu": cpu,
+					},
 				},
 			},
 		},
@@ -261,34 +278,117 @@ func (s *KubeStorage) Create(ctx context.Context, request CreateInstanceRequest)
 	return clusterToDBInstance(createdCluster)
 }
 
-func (s *KubeStorage) Update(ctx context.Context, id string, request UpdateInstanceRequest) (DBInstance, error) {
-	if request.Name == "" {
-		return DBInstance{}, fmt.Errorf("%w: name is required", ErrInvalidInstance)
-	}
-
-	if request.Instances < 1 {
-		return DBInstance{}, fmt.Errorf("%w: instances must be at least 1", ErrInvalidInstance)
-	}
-
+func (s *KubeStorage) Patch(ctx context.Context, id string, request PatchInstanceRequest) (DBInstance, error) {
 	cluster, err := s.getManagedCluster(ctx, id)
 	if err != nil {
 		return DBInstance{}, err
 	}
 
-	annotations := cluster.GetAnnotations()
-	if annotations == nil {
-		annotations = make(map[string]string)
+	if request.Name != nil {
+		name := strings.TrimSpace(*request.Name)
+		if name == "" {
+			return DBInstance{}, fmt.Errorf(
+				"%w: name cannot be empty",
+				ErrInvalidInstance,
+			)
+		}
+
+		annotations := cluster.GetAnnotations()
+		if annotations == nil {
+			annotations = make(map[string]string)
+		}
+
+		annotations[displayNameAnnotation] = name
+		cluster.SetAnnotations(annotations)
 	}
 
-	annotations[displayNameAnnotation] = request.Name
-	cluster.SetAnnotations(annotations)
+	if request.Instances != nil {
+		if *request.Instances < 1 {
+			return DBInstance{}, fmt.Errorf(
+				"%w: instances must be at least 1",
+				ErrInvalidInstance,
+			)
+		}
 
-	err = unstructured.SetNestedField(cluster.Object, int64(request.Instances), "spec", "instances")
-	if err != nil {
-		return DBInstance{}, fmt.Errorf(
-			"update spec.instances: %w",
-			err,
+		if err := unstructured.SetNestedField(
+			cluster.Object,
+			int64(*request.Instances),
+			"spec",
+			"instances",
+		); err != nil {
+			return DBInstance{}, fmt.Errorf(
+				"update spec.instances: %w",
+				err,
+			)
+		}
+	}
+
+	if request.Storage != nil {
+		requestedStorage, err := normalizePositiveQuantity(
+			*request.Storage,
+			"storage",
 		)
+		if err != nil {
+			return DBInstance{}, err
+		}
+
+		currentStorage, found, err := unstructured.NestedString(
+			cluster.Object,
+			"spec",
+			"storage",
+			"size",
+		)
+		if err != nil {
+			return DBInstance{}, fmt.Errorf(
+				"read spec.storage.size: %w",
+				err,
+			)
+		}
+
+		if !found || currentStorage == "" {
+			currentStorage = defaultStorageSize
+		}
+
+		if err := validateStorageExpansion(
+			currentStorage,
+			requestedStorage,
+		); err != nil {
+			return DBInstance{}, err
+		}
+
+		if err := unstructured.SetNestedField(
+			cluster.Object,
+			requestedStorage,
+			"spec",
+			"storage",
+			"size",
+		); err != nil {
+			return DBInstance{}, fmt.Errorf(
+				"update spec.storage.size: %w",
+				err,
+			)
+		}
+	}
+
+	if request.CPU != nil {
+		cpu, err := normalizePositiveQuantity(*request.CPU, "cpu")
+		if err != nil {
+			return DBInstance{}, err
+		}
+
+		if err := unstructured.SetNestedField(
+			cluster.Object,
+			cpu,
+			"spec",
+			"resources",
+			"requests",
+			"cpu",
+		); err != nil {
+			return DBInstance{}, fmt.Errorf(
+				"update spec.resources.requests.cpu: %w",
+				err,
+			)
+		}
 	}
 
 	updatedCluster, err := s.client.
@@ -342,10 +442,6 @@ func (s *KubeStorage) Delete(ctx context.Context, id string) error {
 	return nil
 }
 
-
-
-
-
 // -------------- helper --------------
 func clusterToDBInstance(cluster *unstructured.Unstructured) (DBInstance, error) {
 	id := cluster.GetName()
@@ -358,6 +454,7 @@ func clusterToDBInstance(cluster *unstructured.Unstructured) (DBInstance, error)
 		name = annotationName
 	}
 
+	// read instance number
 	instanceCount, found, err :=
 		unstructured.NestedInt64(
 			cluster.Object,
@@ -377,6 +474,46 @@ func clusterToDBInstance(cluster *unstructured.Unstructured) (DBInstance, error)
 		instanceCount = 0
 	}
 
+	//read storage
+	storage, found, err := unstructured.NestedString(
+		cluster.Object,
+		"spec",
+		"storage",
+		"size",
+	)
+	if err != nil {
+		return DBInstance{}, fmt.Errorf(
+			"read spec.storage.size from Cluster %q: %w",
+			id,
+			err,
+		)
+	}
+
+	if !found || storage == "" {
+		storage = defaultStorageSize
+	}
+
+	//read cpu
+	cpu, found, err := unstructured.NestedString(
+		cluster.Object,
+		"spec",
+		"resources",
+		"requests",
+		"cpu",
+	)
+	if err != nil {
+		return DBInstance{}, fmt.Errorf(
+			"read spec.resources.requests.cpu from Cluster %q: %w",
+			id,
+			err,
+		)
+	}
+
+	if !found || cpu == "" {
+		cpu = defaultCPURequest
+	}
+
+	//read status
 	status, found, err :=
 		unstructured.NestedString(
 			cluster.Object,
@@ -412,6 +549,8 @@ func clusterToDBInstance(cluster *unstructured.Unstructured) (DBInstance, error)
 		ID:        id,
 		Name:      name,
 		Instances: int(instanceCount),
+		Storage:   storage,
+		CPU:       cpu,
 		Status:    status,
 		CreatedAt: createdAt,
 	}, nil
@@ -458,7 +597,6 @@ func (s *KubeStorage) getManagedCluster(
 
 	return cluster, nil
 }
-
 
 func secretData(
 	data map[string][]byte,

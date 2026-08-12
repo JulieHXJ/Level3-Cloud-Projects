@@ -1,4 +1,4 @@
-package main
+package instance
 
 import (
 	"encoding/json"
@@ -7,6 +7,23 @@ import (
 	"net/http"
 	"strings"
 )
+
+const instancesPath = "/api/v1/instances"
+
+type Handler struct {
+	store InstanceStore
+}
+
+func NewHandler(storage InstanceStore) *Handler {
+	return &Handler{
+		store: storage,
+	}
+}
+
+func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
+	mux.HandleFunc(instancesPath, h.instancesHandler)
+	mux.HandleFunc(instancesPath+"/", h.instancesIDHandler)
+}
 
 // GET/instances
 // return a list of all database instances
@@ -96,13 +113,13 @@ func (h *Handler) deleteInstance(w http.ResponseWriter, r *http.Request, id stri
 }
 
 // PUT /instances/{id}
-func (h *Handler) updateInstance(w http.ResponseWriter, r *http.Request, id string) {
+func (h *Handler) patchInstance(w http.ResponseWriter, r *http.Request, id string) {
 	if r.Header.Get("Content-Type") != "application/json" {
 		printError(w, http.StatusUnsupportedMediaType, "Content-Type not JSON")
 		return
 	}
 
-	var request UpdateInstanceRequest
+	var request PatchInstanceRequest
 
 	err := json.NewDecoder(r.Body).Decode(&request)
 	if err != nil {
@@ -111,31 +128,35 @@ func (h *Handler) updateInstance(w http.ResponseWriter, r *http.Request, id stri
 		return
 	}
 
-	if request.Name == "" {
-		printError(w, http.StatusBadRequest, "missing instance name")
+	if request.Name == nil &&
+		request.Instances == nil &&
+		request.Storage == nil &&
+		request.CPU == nil {
+		printError(w, http.StatusBadRequest, "no fields to update")
 		return
 	}
 
-	if request.Instances < 1 {
-		printError(w, http.StatusBadRequest, "instance number must be positive")
-		return
-	}
-
-	instance, err := h.store.Update(r.Context(), id, request)
+	instance, err := h.store.Patch(r.Context(), id, request)
 	if err != nil {
-		if errors.Is(err, ErrInstanceNotFound) {
-			printError(w, http.StatusNotFound, "instance not fount")
-			return
+		switch {
+		case errors.Is(err, ErrInstanceNotFound):
+			printError(w, http.StatusNotFound, "instance not found")
+		case errors.Is(err, ErrInvalidInstance):
+			printError(w, http.StatusBadRequest, err.Error())
+		default:
+			log.Println("failed to patch instance:", err)
+			printError(
+				w,
+				http.StatusInternalServerError,
+				"failed to patch instance",
+			)
 		}
-		log.Println("failed to update instance:", err)
-		printError(w, http.StatusInternalServerError, "failed to update instance")
 		return
 	}
 
 	writeJSON(w, http.StatusOK, instance)
 
 }
-
 
 // GET /instacnes/{id}/connection
 func (h *Handler) getConnection(w http.ResponseWriter, r *http.Request, id string) {
@@ -179,7 +200,7 @@ func (h *Handler) instancesHandler(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) instancesIDHandler(w http.ResponseWriter, r *http.Request) {
 	//get id (and connction) from url
-	path := strings.TrimPrefix(r.URL.Path, "/instances/")
+	path := strings.TrimPrefix(r.URL.Path, instancesPath+"/")
 	path = strings.Trim(path, "/")
 	if path == "" {
 		printError(w, http.StatusBadRequest, "missing instance id")
@@ -196,11 +217,21 @@ func (h *Handler) instancesIDHandler(w http.ResponseWriter, r *http.Request) {
 	// GET /instances/{id}/connection
 	if len(arr) == 2 && arr[1] == "connection" {
 		if r.Method != http.MethodGet {
-			w.Header().Set("Allow", "GET")
+			w.Header().Set("Allow", http.MethodGet)
 			printError(w, http.StatusMethodNotAllowed, "method not allowed")
 			return
 		}
 		h.getConnection(w, r, id)
+		return
+	}
+
+	// 拒绝 /instances/{id}/unknown 等无效路径。
+	if len(arr) != 1 {
+		printError(
+			w,
+			http.StatusNotFound,
+			"endpoint not found",
+		)
 		return
 	}
 
@@ -209,14 +240,14 @@ func (h *Handler) instancesIDHandler(w http.ResponseWriter, r *http.Request) {
 	case http.MethodGet:
 		h.getInstanceByID(w, r, id)
 
-	case http.MethodPut:
-		h.updateInstance(w, r, id)
+	case http.MethodPatch:
+		h.patchInstance(w, r, id)
 
 	case http.MethodDelete:
 		h.deleteInstance(w, r, id)
 
 	default:
-		w.Header().Set("Allow", "GET, PUT, DELETE")
+		w.Header().Set("Allow", "GET, PATCH, DELETE")
 		printError(w, http.StatusMethodNotAllowed, "method not allowed")
 	}
 }

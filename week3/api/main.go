@@ -6,19 +6,11 @@ import (
 	"net/http"
 	"os"
 	"time"
+
+	api "cloud3-api/internal/api"
+	"cloud3-api/internal/instance"
+	"github.com/labstack/echo/v4"
 )
-
-// // Local memory storage for testing.
-// // Key: instance ID
-// // Value: database instance
-// var instances = make(map[string]DBInstance)
-
-// // generate IDs
-// var nextID int = 1
-
-type Handler struct {
-	store InstanceStore
-}
 
 const (
 	apiV1Prefix   = "/api/v1"
@@ -27,12 +19,6 @@ const (
 	petsPath      = apiV1Prefix + "/pets"
 )
 
-func NewHandler(storage InstanceStore) *Handler {
-	return &Handler{
-		store: storage,
-	}
-}
-
 func main() {
 	// CloudNativePG Cluster CR namespace。
 	namespace := os.Getenv("DB_NAMESPACE")
@@ -40,20 +26,23 @@ func main() {
 		namespace = "postgres-demo"
 	}
 
-	// create Kubernetes client save into InstanceStorage
-	store, err := NewKubeStorage(namespace)
+	// create Kubernetes client and save into InstanceStorage
+	store, err := instance.NewKubeStorage(namespace)
 	if err != nil {
 		log.Fatal("failed to create Kubernetes storage: ", err)
 	}
 
-	// mstorage := NewMemoryStorage()
-	handler := NewHandler(store)
+	auth, err := newAuthService()
+	if err != nil {
+		log.Fatal("failed to configure authentication: ", err)
+	}
+
+	handler := instance.NewHandler(store)
 
 	// use servermux, register router
 	mux := http.NewServeMux()
-	mux.HandleFunc("/health", healthHandler)
-	mux.HandleFunc(instancesPath, handler.instancesHandler)       //GET POST /instance
-	mux.HandleFunc(instancesPath+"/", handler.instancesIDHandler) //Get DELETE PUT /instances/{id}
+	mux.HandleFunc("/api/v1/health", healthHandler)
+	handler.RegisterRoutes(mux)
 
 	// mux.HandleFunc(usersPath, handler.userHandler)
 	// mux.HandleFunc(usersPath+"/", handler.userByIDHandler)
@@ -61,15 +50,30 @@ func main() {
 	// mux.HandleFunc(petsPath, handler.petHandler)
 	// mux.HandleFunc(petsPath+"/", handler.petByIDHandler)
 
+	// Echo is now the externally exposed router.
+	e := echo.New()
+	e.HideBanner = true
+	e.HidePort = true
+
+	// Authenticate every request through middleware
+	e.Use(auth.jwtMiddleware)
+	generatedServer := &APIServer{
+		legacy: mux,
+		auth:   auth,
+	}
+
+	// Register every route generated from openapi.yaml.
+	api.RegisterHandlers(e, generatedServer)
+
 	server := &http.Server{
 		Addr:              ":8080",
-		Handler:           mux,
+		Handler:           corsMiddleware(e),
 		ReadHeaderTimeout: 5 * time.Second,
 	}
 
 	log.Println("Server is listening to http://localhost:8080")
 	err = server.ListenAndServe()
-	if err != nil {
+	if err != nil && err != http.ErrServerClosed {
 		log.Fatal(err)
 	}
 }
@@ -80,38 +84,21 @@ func main() {
 func healthHandler(w http.ResponseWriter, r *http.Request) {
 	// check request name
 	if r.Method != http.MethodGet {
-		printError(w, http.StatusMethodNotAllowed, "method not allowed")
+		w.Header().Set("Allow", http.MethodGet)
+		http.Error(
+			w,
+			"method not allowed",
+			http.StatusMethodNotAllowed,
+		)
 		return
 	}
 
-	writeJSON(w, http.StatusOK, map[string]string{
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+
+	if err := json.NewEncoder(w).Encode(map[string]string{
 		"status": "ok",
-	},
-	)
-}
-
-// ---------------------Helper func ---------------
-// print JSON error with status code
-func printError(w http.ResponseWriter, status int, m string) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(status)
-
-	response := map[string]string{
-		"error": m,
-	}
-
-	err := json.NewEncoder(w).Encode(response)
-	if err != nil {
-		log.Println("failed to encode error response:", err)
-	}
-}
-
-// any -> interface
-func writeJSON(w http.ResponseWriter, status int, data any) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(status)
-	err := json.NewEncoder(w).Encode(data)
-	if err != nil {
-		log.Println("failed to encode instance response:", err)
+	}); err != nil {
+		log.Printf("failed to encode health response: %v", err)
 	}
 }

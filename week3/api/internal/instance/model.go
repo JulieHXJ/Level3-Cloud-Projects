@@ -1,29 +1,35 @@
-package main
+package instance
 
 type DBInstance struct {
 	ID        string `json:"id"`
 	Name      string `json:"name"`
-	Instances int    `json:"instances"` // dababase node count
+	Instances int    `json:"instances"`
+	Storage   string `json:"storage"`
+	CPU       string `json:"cpu"`
 	Status    string `json:"status"`
 	CreatedAt string `json:"createdAt"`
 }
 
 // POST request
 type CreateInstanceRequest struct {
-	Name      string `json:"name"`
-	Instances int    `json:"instances"`
+	Name      string  `json:"name"`
+	Instances int     `json:"instances"`
+	Storage   *string `json:"storage,omitempty"`
+	CPU       *string `json:"cpu,omitempty"`
 }
 
-// PUT
-type UpdateInstanceRequest struct {
-	Name      string `json:"name"`
-	Instances int    `json:"instances"`
-}
+// // PUT
+// type UpdateInstanceRequest struct {
+// 	Name      string `json:"name"`
+// 	Instances int    `json:"instances"`
+// }
 
-//PATCH
+// PATCH
 type PatchInstanceRequest struct {
 	Name      *string `json:"name,omitempty"`
 	Instances *int    `json:"instances,omitempty"`
+	Storage   *string `json:"storage,omitempty"`
+	CPU       *string `json:"cpu,omitempty"`
 }
 
 type ConnectionInfo struct {
@@ -33,5 +39,4 @@ type ConnectionInfo struct {
 	Username string `json:"username"`
 	Password string `json:"password"`
 	URI      string `json:"uri,omitempty"`
-
 }
