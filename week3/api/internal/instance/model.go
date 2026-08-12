@@ -18,12 +18,6 @@ type CreateInstanceRequest struct {
 	CPU       *string `json:"cpu,omitempty"`
 }
 
-// // PUT
-// type UpdateInstanceRequest struct {
-// 	Name      string `json:"name"`
-// 	Instances int    `json:"instances"`
-// }
-
 // PATCH
 type PatchInstanceRequest struct {
 	Name      *string `json:"name,omitempty"`

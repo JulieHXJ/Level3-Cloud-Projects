@@ -1,0 +1,152 @@
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-width: 320px;
+  min-height: 100vh;
+  color: #1f2937;
+  background: #f3f4f6;
+  font-family: Arial, sans-serif;
+}
+
+a {
+  color: #2563eb;
+}
+
+button,
+.button-link {
+  display: inline-block;
+  padding: 10px 16px;
+  color: white;
+  background: #2563eb;
+  border: 0;
+  border-radius: 6px;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+button:hover,
+.button-link:hover {
+  background: #1d4ed8;
+}
+
+.page {
+  width: min(1000px, calc(100% - 32px));
+  margin: 40px auto;
+}
+
+.narrow-page {
+  max-width: 480px;
+}
+
+.page-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 24px;
+}
+
+.panel {
+  padding: 24px;
+  background: white;
+  border: 1px solid #d1d5db;
+  border-radius: 8px;
+}
+
+.form {
+  display: grid;
+  gap: 16px;
+  margin-top: 24px;
+}
+
+.form label {
+  display: grid;
+  gap: 6px;
+  font-weight: 600;
+}
+
+.form input {
+  padding: 10px;
+  border: 1px solid #9ca3af;
+  border-radius: 6px;
+  font: inherit;
+}
+
+.muted {
+  color: #6b7280;
+}
+
+.notice {
+  margin-top: 20px;
+  padding: 10px;
+  color: #92400e;
+  background: #fef3c7;
+  border-radius: 6px;
+}
+
+
+.form select {
+  padding: 10px;
+  border: 1px solid #9ca3af;
+  border-radius: 6px;
+  background: white;
+  font: inherit;
+}
+
+.dashboard-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+}
+
+.role-badge {
+  display: inline-block;
+  margin-left: 8px;
+  padding: 3px 8px;
+  color: #1e40af;
+  background: #dbeafe;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: bold;
+  text-transform: uppercase;
+}
+
+.actions {
+  display: flex;
+  gap: 12px;
+  margin-top: 20px;
+}
+
+.secondary-button {
+  color: #1f2937;
+  background: #e5e7eb;
+}
+
+.secondary-button:hover {
+  background: #d1d5db;
+}
+
+.danger-button {
+  background: #dc2626;
+}
+
+.danger-button:hover {
+  background: #b91c1c;
+}
+
+.error-message {
+  margin: 0;
+  padding: 10px;
+  color: #991b1b;
+  background: #fee2e2;
+  border: 1px solid #fecaca;
+  border-radius: 6px;
+}
+
+button:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
