@@ -3,9 +3,7 @@ import { defineStore } from 'pinia'
 
 export const useAuthStore = defineStore('auth', () => {
   const token = ref(sessionStorage.getItem('cloud3-token') || '')
-  const tokenType = ref(
-    sessionStorage.getItem('cloud3-token-type') || 'Bearer',
-  )
+  const tokenType = ref(sessionStorage.getItem('cloud3-token-type') || 'Bearer')
   const role = ref(sessionStorage.getItem('cloud3-role') || '')
   const username = ref(sessionStorage.getItem('cloud3-username') || '')
 
@@ -53,9 +51,7 @@ export const useAuthStore = defineStore('auth', () => {
     const body = await response.json().catch(() => ({}))
 
     if (!response.ok) {
-      throw new Error(
-        body.message || body.error || `Login failed: ${response.status}`,
-      )
+      throw new Error(body.message || body.error || `Login failed: ${response.status}`)
     }
 
     if (!body.token) {

@@ -20,8 +20,7 @@ async function handleLogin() {
     await auth.login(username.value, password.value)
     await router.replace(auth.dashboardPath)
   } catch (error) {
-    loginError.value =
-      error instanceof Error ? error.message : 'Login failed'
+    loginError.value = error instanceof Error ? error.message : 'Login failed'
   } finally {
     isLoading.value = false
   }
@@ -29,43 +28,60 @@ async function handleLogin() {
 </script>
 
 <template>
-  <main class="page narrow-page">
-    <section class="panel">
-      <h1>Cloud3 Login</h1>
+  <main class="login-page">
+    <section class="login-container">
+      <div class="login-brand">
+        <!-- <div class="brand-mark">C3</div> -->
 
-      <p class="muted">
-        Sign in to manage PostgreSQL instances.
-      </p>
+        <div>
+          <h1>Cloud3</h1>
+          <p>Managed PostgreSQL Platform</p>
+        </div>
+      </div>
 
-      <form class="form" @submit.prevent="handleLogin">
-        <label>
-          Username
-          <input
-            v-model.trim="username"
-            type="text"
-            autocomplete="username"
-            required
-          />
-        </label>
+      <section class="login-card">
+        <div class="login-heading">
+          <h2>Welcome back</h2>
 
-        <label>
-          Password
-          <input
-            v-model="password"
-            type="password"
-            autocomplete="current-password"
-            required
-          />
-        </label>
+          <p>
+            Sign in to manage your instances.
+          </p>
+        </div>
 
-        <p v-if="loginError" class="error-message">
-          {{ loginError }}
-        </p>
+        <form class="form" @submit.prevent="handleLogin">
+          <label>
+            Username
 
-        <button type="submit" :disabled="isLoading">
-          {{ isLoading ? 'Signing in...' : 'Login' }}
-        </button>
-      </form>
+            <input
+              v-model.trim="username"
+              type="text"
+              autocomplete="username"
+              placeholder="Enter your username"
+              required
+            />
+          </label>
+
+          <label>
+            Password
+
+            <input
+              v-model="password"
+              type="password"
+              autocomplete="current-password"
+              placeholder="Enter your password"
+              required
+            />
+          </label>
+
+          <p v-if="loginError" class="login-error">
+            {{ loginError }}
+          </p>
+
+          <button type="submit" :disabled="isLoading">
+            {{ isLoading ? 'Signing in...' : 'Sign in' }}
+          </button>
+        </form>
+      </section>
     </section>
   </main>
 </template>

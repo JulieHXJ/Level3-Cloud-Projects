@@ -20,7 +20,7 @@ const router = createRouter({
     },
     {
       path: '/dashboard',
-      beforeEnter: () => {
+      redirect: () => {
         const auth = useAuthStore()
 
         if (!auth.isAuthenticated) {
@@ -80,10 +80,7 @@ router.beforeEach((to) => {
     }
   }
 
-  if (
-    Array.isArray(to.meta.roles) &&
-    !to.meta.roles.includes(auth.role)
-  ) {
+  if (Array.isArray(to.meta.roles) && !to.meta.roles.includes(auth.role)) {
     return auth.dashboardPath
   }
 })
