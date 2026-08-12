@@ -10,7 +10,7 @@ info:
 servers:
   - url: http://localhost:8080
     description: Local development or kubectl port-forward
-  - url: http://cloud4-api.postgres-demo.svc.cluster.local
+  - url: http://cloud3-api.postgres-demo.svc.cluster.local
     description: Kubernetes cluster-internal service
 
 

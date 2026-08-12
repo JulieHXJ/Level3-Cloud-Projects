@@ -1,7 +1,7 @@
 SHELL := /bin/bash
 
 GO ?= go
-APP := cloud4-api
+APP := cloud3-api
 
 .PHONY: help generate test run build fmt tidy check swagger clean hash-password
 
