@@ -81,11 +81,34 @@ jobs:
           docker push "$REGISTRY/$IMAGE_REPOSITORY:$IMAGE_TAG"
 
 
+      - name: Set up kubectl
+        if: ${{ success() && forgejo.ref == 'refs/heads/main' && forgejo.event_name != 'pull_request' }}
+        uses: azure/setup-kubectl@v4
+        with:
+          version: v1.35.0
+
+
+      - name: Configure Kubernetes access
+        if: ${{ success() && forgejo.ref == 'refs/heads/main' && forgejo.event_name != 'pull_request' }}
+        env:
+          KUBECONFIG_B64: ${{ secrets.KUBECONFIG_B64 }}
+        run: |
+          mkdir -p "$RUNNER_TEMP/kube"
+          printf '%s' "$KUBECONFIG_B64" |
+            base64 --decode > "$RUNNER_TEMP/kube/config"
+          chmod 600 "$RUNNER_TEMP/kube/config"
+
+          
       - name: Verify Kubernetes access
         if: ${{ success() && forgejo.ref == 'refs/heads/main' && forgejo.event_name != 'pull_request' }}
         run: |
-          kubectl auth can-i create secrets --namespace postgres-demo
-          kubectl auth can-i patch secrets --namespace postgres-demo
+          kubectl version --client
+          kubectl auth can-i create secrets \
+            --namespace postgres-demo \
+            --quiet
+          kubectl auth can-i patch secrets \
+            --namespace postgres-demo \
+            --quiet
 
       - name: Synchronize API authentication secret
         if: ${{ success() && forgejo.ref == 'refs/heads/main' && forgejo.event_name != 'pull_request' }}
