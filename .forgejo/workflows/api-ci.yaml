@@ -80,6 +80,30 @@ jobs:
         run: |
           docker push "$REGISTRY/$IMAGE_REPOSITORY:$IMAGE_TAG"
 
+
+      - name: Verify Kubernetes access
+        if: ${{ success() && forgejo.ref == 'refs/heads/main' && forgejo.event_name != 'pull_request' }}
+        run: |
+          kubectl auth can-i create secrets --namespace postgres-demo
+          kubectl auth can-i patch secrets --namespace postgres-demo
+
+      - name: Synchronize API authentication secret
+        if: ${{ success() && forgejo.ref == 'refs/heads/main' && forgejo.event_name != 'pull_request' }}
+        env:
+          JWT_SECRET: ${{ secrets.JWT_SECRET }}
+          ADMIN_PASSWORD_HASH: ${{ secrets.ADMIN_PASSWORD_HASH }}
+          VIEWER_PASSWORD_HASH: ${{ secrets.VIEWER_PASSWORD_HASH }}
+        run: |
+          kubectl create secret generic cloud3-api-auth \
+            --namespace postgres-demo \
+            --from-literal=JWT_SECRET="$JWT_SECRET" \
+            --from-literal=ADMIN_PASSWORD_HASH="$ADMIN_PASSWORD_HASH" \
+            --from-literal=VIEWER_PASSWORD_HASH="$VIEWER_PASSWORD_HASH" \
+            --dry-run=client \
+            --output=yaml |
+          kubectl apply -f -
+
+
       - name: Update GitOps manifest
         if: ${{ success() && forgejo.ref == 'refs/heads/main' && forgejo.event_name != 'pull_request' }}
         run: |

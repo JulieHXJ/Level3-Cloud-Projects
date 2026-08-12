@@ -89,10 +89,14 @@ spec:
                 fieldRef:
                   fieldPath: metadata.namespace  # export pod namespace into env
 
+          envFrom:
+            - secretRef:
+                name: cloud3-api-auth
+          
           # check ready or not
           readinessProbe:
             httpGet:
-              path: /health
+              path: /api/v1/health
               port: http
             initialDelaySeconds: 2
             periodSeconds: 5
@@ -101,7 +105,7 @@ spec:
           # check alive
           livenessProbe:
             httpGet:
-              path: /health
+              path: /api/v1/health
               port: http
             initialDelaySeconds: 10
             periodSeconds: 10
