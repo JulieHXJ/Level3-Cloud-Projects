@@ -80,53 +80,6 @@ jobs:
         run: |
           docker push "$REGISTRY/$IMAGE_REPOSITORY:$IMAGE_TAG"
 
-
-      - name: Set up kubectl
-        if: ${{ success() && forgejo.ref == 'refs/heads/main' && forgejo.event_name != 'pull_request' }}
-        uses: azure/setup-kubectl@v4
-        with:
-          version: v1.35.0
-
-
-      - name: Configure Kubernetes access
-        if: ${{ success() && forgejo.ref == 'refs/heads/main' && forgejo.event_name != 'pull_request' }}
-        env:
-          KUBECONFIG_B64: ${{ secrets.KUBECONFIG_B64 }}
-        run: |
-          mkdir -p "$RUNNER_TEMP/kube"
-          printf '%s' "$KUBECONFIG_B64" |
-            base64 --decode > "$RUNNER_TEMP/kube/config"
-          chmod 600 "$RUNNER_TEMP/kube/config"
-
-          
-      - name: Verify Kubernetes access
-        if: ${{ success() && forgejo.ref == 'refs/heads/main' && forgejo.event_name != 'pull_request' }}
-        run: |
-          kubectl version --client
-          kubectl auth can-i create secrets \
-            --namespace postgres-demo \
-            --quiet
-          kubectl auth can-i patch secrets \
-            --namespace postgres-demo \
-            --quiet
-
-      - name: Synchronize API authentication secret
-        if: ${{ success() && forgejo.ref == 'refs/heads/main' && forgejo.event_name != 'pull_request' }}
-        env:
-          JWT_SECRET: ${{ secrets.JWT_SECRET }}
-          ADMIN_PASSWORD_HASH: ${{ secrets.ADMIN_PASSWORD_HASH }}
-          VIEWER_PASSWORD_HASH: ${{ secrets.VIEWER_PASSWORD_HASH }}
-        run: |
-          kubectl create secret generic cloud3-api-auth \
-            --namespace postgres-demo \
-            --from-literal=JWT_SECRET="$JWT_SECRET" \
-            --from-literal=ADMIN_PASSWORD_HASH="$ADMIN_PASSWORD_HASH" \
-            --from-literal=VIEWER_PASSWORD_HASH="$VIEWER_PASSWORD_HASH" \
-            --dry-run=client \
-            --output=yaml |
-          kubectl apply -f -
-
-
       - name: Update GitOps manifest
         if: ${{ success() && forgejo.ref == 'refs/heads/main' && forgejo.event_name != 'pull_request' }}
         run: |
@@ -160,14 +113,3 @@ jobs:
 
 
 
-
-# 1. 将 Git Repository 下载到 Runner
-# 2. 根据 go.mod 准备对应 Go 版本
-# 3. 检查 Runner 是否能够访问 Docker
-# 4. 运行所有 Go Unit Tests
-# 5. 检查项目是否能够成功编译
-# 6. 登录 STACKIT Container Registry
-# 7. 使用 week3/api/Dockerfile 构建镜像
-# 8. 推送镜像
-# 9. 修改 GitOps Deployment 中的镜像版本
-# 10. 将新的镜像版本提交回 Git
