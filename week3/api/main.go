@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"log"
 	"net/http"
@@ -9,6 +10,8 @@ import (
 
 	api "cloud3-api/internal/api"
 	"cloud3-api/internal/instance"
+	"cloud3-api/internal/user"
+
 	"github.com/labstack/echo/v4"
 )
 
@@ -20,6 +23,23 @@ const (
 )
 
 func main() {
+
+	// create user db
+	ctx := context.Background()
+
+	platformDatabaseURL := os.Getenv("PLATFORM_DATABASE_URL")
+	if platformDatabaseURL == "" {
+		log.Fatal("PLATFORM_DATABASE_URL is not set")
+	}
+
+	userStore, err := user.NewPostgresStorage(ctx, platformDatabaseURL)
+	if err != nil {
+		log.Fatal("failed to connect to platform database: ", err)
+	}
+	defer userStore.Close()
+
+	log.Println("connected to platform database")
+
 	// CloudNativePG Cluster CR namespace。
 	namespace := os.Getenv("DB_NAMESPACE")
 	if namespace == "" {

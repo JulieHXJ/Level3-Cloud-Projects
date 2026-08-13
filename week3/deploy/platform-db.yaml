@@ -1,0 +1,28 @@
+# create users table
+apiVersion: postgresql.cnpg.io/v1
+kind: Cluster
+metadata:
+  name: cloud3-platform-db
+  namespace: postgres-demo
+
+spec:
+  instances: 1
+
+  bootstrap:
+    initdb:
+      database: cloud3_platform
+      owner: cloud3_app
+
+      postInitApplicationSQL:
+        - |
+          CREATE TABLE IF NOT EXISTS users (
+              id UUID PRIMARY KEY,
+              username VARCHAR(100) NOT NULL UNIQUE,
+              password_hash TEXT NOT NULL,
+              role VARCHAR(20) NOT NULL DEFAULT 'user'
+                  CHECK (role IN ('admin', 'user')),
+              created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+          );
+
+  storage:
+    size: 1Gi
