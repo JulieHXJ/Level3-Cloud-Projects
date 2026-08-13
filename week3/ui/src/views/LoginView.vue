@@ -1,16 +1,21 @@
 <script setup>
-import { ref } from 'vue'
-import { useRouter } from 'vue-router'
+import { computed, ref } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 
 import { useAuthStore } from '../stores/auth'
 
 const router = useRouter()
+const route = useRoute()
 const auth = useAuthStore()
 
 const username = ref('')
 const password = ref('')
 const loginError = ref('')
 const isLoading = ref(false)
+
+const registrationSuccess = computed(() => {
+  return route.query.registered === '1'
+})
 
 async function handleLogin() {
   loginError.value = ''
@@ -31,11 +36,9 @@ async function handleLogin() {
   <main class="login-page">
     <section class="login-container">
       <div class="login-brand">
-        <!-- <div class="brand-mark">C3</div> -->
-
         <div>
-          <h1>Cloud3</h1>
-          <p>Managed PostgreSQL Platform</p>
+          <h1>VetNest</h1>
+          <p>Veterinary Health Platform</p>
         </div>
       </div>
 
@@ -43,8 +46,12 @@ async function handleLogin() {
         <div class="login-heading">
           <h2>Welcome back</h2>
 
-          <p>Sign in to manage your instances.</p>
+          <p>Sign in to access your clinic workspace and manage your veterinary data.</p>
         </div>
+
+        <p v-if="registrationSuccess" class="login-success">
+          Account created successfully. You can now sign in.
+        </p>
 
         <form class="form" @submit.prevent="handleLogin">
           <label>
@@ -79,6 +86,11 @@ async function handleLogin() {
             {{ isLoading ? 'Signing in...' : 'Sign in' }}
           </button>
         </form>
+
+        <p class="auth-switch">
+          New to VetNest?
+          <RouterLink to="/register">Create an account</RouterLink>
+        </p>
       </section>
     </section>
   </main>

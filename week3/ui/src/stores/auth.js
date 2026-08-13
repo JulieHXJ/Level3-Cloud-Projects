@@ -2,10 +2,10 @@ import { computed, ref } from 'vue'
 import { defineStore } from 'pinia'
 
 export const useAuthStore = defineStore('auth', () => {
-  const token = ref(sessionStorage.getItem('cloud3-token') || '')
-  const tokenType = ref(sessionStorage.getItem('cloud3-token-type') || 'Bearer')
-  const role = ref(sessionStorage.getItem('cloud3-role') || '')
-  const username = ref(sessionStorage.getItem('cloud3-username') || '')
+  const token = ref(sessionStorage.getItem('vetnest-token') || '')
+  const tokenType = ref(sessionStorage.getItem('vetnest-token-type') || 'Bearer')
+  const role = ref(sessionStorage.getItem('vetnest-role') || '')
+  const username = ref(sessionStorage.getItem('vetnest-username') || '')
 
   const isAuthenticated = computed(() => {
     return Boolean(token.value && (role.value === 'admin' || role.value === 'user'))
@@ -43,7 +43,7 @@ export const useAuthStore = defineStore('auth', () => {
       },
 
       body: JSON.stringify({
-        username: registerUsername,
+        username: registerUsername.trim(),
         password,
       }),
     })
@@ -66,7 +66,7 @@ export const useAuthStore = defineStore('auth', () => {
       },
 
       body: JSON.stringify({
-        username: loginUsername,
+        username: loginUsername.trim(),
         password,
       }),
     })
@@ -88,12 +88,12 @@ export const useAuthStore = defineStore('auth', () => {
     token.value = body.token
     tokenType.value = body.tokenType || 'Bearer'
     role.value = body.role
-    username.value = loginUsername
+    username.value = loginUsername.trim()
 
-    sessionStorage.setItem('cloud3-token', token.value)
-    sessionStorage.setItem('cloud3-token-type', tokenType.value)
-    sessionStorage.setItem('cloud3-role', role.value)
-    sessionStorage.setItem('cloud3-username', username.value)
+    sessionStorage.setItem('vetnest-token', token.value)
+    sessionStorage.setItem('vetnest-token-type', tokenType.value)
+    sessionStorage.setItem('vetnest-role', role.value)
+    sessionStorage.setItem('vetnest-username', username.value)
   }
 
   function logout() {
@@ -102,10 +102,10 @@ export const useAuthStore = defineStore('auth', () => {
     role.value = ''
     username.value = ''
 
-    sessionStorage.removeItem('cloud3-token')
-    sessionStorage.removeItem('cloud3-token-type')
-    sessionStorage.removeItem('cloud3-role')
-    sessionStorage.removeItem('cloud3-username')
+    sessionStorage.removeItem('vetnest-token')
+    sessionStorage.removeItem('vetnest-token-type')
+    sessionStorage.removeItem('vetnest-role')
+    sessionStorage.removeItem('vetnest-username')
   }
 
   return {

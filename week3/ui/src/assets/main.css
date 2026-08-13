@@ -986,3 +986,50 @@ button:disabled {
   padding: 10px 16px;
   cursor: pointer;
 }
+
+.auth-switch {
+  margin-top: 20px;
+  text-align: center;
+}
+
+.auth-switch a {
+  font-weight: 600;
+}
+
+.password-requirements {
+  font-size: 0.9rem;
+}
+
+.password-requirements p {
+  margin-bottom: 8px;
+  font-weight: 600;
+}
+
+.password-requirements ul {
+  margin: 0;
+  padding-left: 20px;
+}
+
+.password-requirements li {
+  margin: 4px 0;
+  opacity: 0.55;
+}
+
+.password-requirements li.met {
+  opacity: 1;
+  font-weight: 600;
+}
+
+.password-requirements li.met::marker {
+  content: '✓  ';
+}
+
+.login-success {
+  margin-bottom: 16px;
+  font-weight: 600;
+}
+
+.instance-table tbody tr.selected-row {
+  outline: 2px solid currentColor;
+  outline-offset: -2px;
+}

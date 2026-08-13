@@ -1,6 +1,7 @@
 import { createRouter, createWebHistory } from 'vue-router'
 
 import LoginView from '../views/LoginView.vue'
+import RegisterView from '../views/RegisterView.vue'
 import DashboardView from '../views/DashboardView.vue'
 import InstanceDetailView from '../views/InstanceDetailView.vue'
 import { useAuthStore } from '../stores/auth'
@@ -13,11 +14,19 @@ const router = createRouter({
       path: '/',
       redirect: '/login',
     },
+
     {
       path: '/login',
       name: 'login',
       component: LoginView,
     },
+
+    {
+      path: '/register',
+      name: 'register',
+      component: RegisterView,
+    },
+
     {
       path: '/dashboard',
       redirect: () => {
@@ -30,6 +39,7 @@ const router = createRouter({
         return auth.dashboardPath
       },
     },
+
     {
       path: '/admin/dashboard',
       name: 'admin-dashboard',
@@ -39,6 +49,7 @@ const router = createRouter({
         roles: ['admin'],
       },
     },
+
     {
       path: '/user/dashboard',
       name: 'user-dashboard',
@@ -48,10 +59,12 @@ const router = createRouter({
         roles: ['user'],
       },
     },
+
     {
       path: '/instances',
       redirect: '/dashboard',
     },
+
     {
       path: '/instances/:id',
       name: 'instance-detail',
@@ -67,7 +80,7 @@ const router = createRouter({
 router.beforeEach((to) => {
   const auth = useAuthStore()
 
-  if (to.name === 'login' && auth.isAuthenticated) {
+  if ((to.name === 'login' || to.name === 'register') && auth.isAuthenticated) {
     return auth.dashboardPath
   }
 
