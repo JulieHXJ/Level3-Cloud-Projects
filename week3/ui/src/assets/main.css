@@ -333,6 +333,10 @@ button:disabled {
   border-color: #e7aaa2;
 }
 
+.dashboard-user {
+  margin-top: 6px;
+}
+
 /* ---------- Instance table ---------- */
 
 .table-wrapper {

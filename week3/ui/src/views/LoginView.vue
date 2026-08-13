@@ -46,7 +46,7 @@ async function handleLogin() {
         <div class="login-heading">
           <h2>Welcome back</h2>
 
-          <p>Sign in to access your clinic workspace and manage your veterinary data.</p>
+          <p>Sign in to access your clinic workspace.</p>
         </div>
 
         <p v-if="registrationSuccess" class="login-success">

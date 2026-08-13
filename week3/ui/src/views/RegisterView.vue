@@ -96,7 +96,7 @@ async function handleRegister() {
         <div class="login-heading">
           <h2>Create your account</h2>
 
-          <p>Create a VetNest account to set up and manage your clinic workspace.</p>
+          <p>Create your VetNest account.</p>
         </div>
 
         <form class="form" @submit.prevent="handleRegister">

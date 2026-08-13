@@ -42,9 +42,7 @@ async function loadInstances() {
 
     if (!response.ok) {
       throw new Error(
-        body.message ||
-          body.error ||
-          `Failed to load clinic workspaces: ${response.status}`,
+        body.message || body.error || `Failed to load clinic workspaces: ${response.status}`,
       )
     }
 
@@ -56,17 +54,12 @@ async function loadInstances() {
 
     if (
       selectedInstance.value &&
-      !instances.value.some(
-        (instance) => instance.id === selectedInstance.value.id,
-      )
+      !instances.value.some((instance) => instance.id === selectedInstance.value.id)
     ) {
       selectedInstance.value = null
     }
   } catch (error) {
-    loadError.value =
-      error instanceof Error
-        ? error.message
-        : 'Failed to load clinic workspaces'
+    loadError.value = error instanceof Error ? error.message : 'Failed to load clinic workspaces'
   } finally {
     isLoading.value = false
   }
@@ -132,36 +125,28 @@ onMounted(() => {
         <p class="dashboard-subtitle">
           Veterinary Health Platform
         </p>
-      </div>
 
-      <div>
-        <p class="dashboard-subtitle">
-          Signed in as {{ auth.username }}
-
+        <p class="dashboard-subtitle dashboard-user">
           <span class="role-badge">
             {{ auth.isAdmin ? 'Platform Admin' : 'Clinic Admin' }}
           </span>
         </p>
-
-        <button
-          class="logout-button"
-          type="button"
-          @click="handleLogout"
-        >
-          Logout
-        </button>
       </div>
+
+      <button
+        class="logout-button"
+        type="button"
+        @click="handleLogout"
+      >
+        Logout
+      </button>
     </header>
 
     <section class="dashboard-panel">
       <div class="panel-header">
         <div>
           <h2>
-            {{
-              auth.isAdmin
-                ? 'Clinic Infrastructure'
-                : 'My Clinic Workspaces'
-            }}
+            {{ auth.isAdmin ? 'Clinic Infrastructure' : 'My Clinic Workspaces' }}
           </h2>
 
           <p class="panel-subtitle">
@@ -173,11 +158,7 @@ onMounted(() => {
           </p>
         </div>
 
-        <button
-          class="primary-button"
-          type="button"
-          @click="showCreateModal = true"
-        >
+        <button class="primary-button" type="button" @click="showCreateModal = true">
           + Create clinic
         </button>
       </div>
@@ -212,24 +193,13 @@ onMounted(() => {
         </button>
       </div>
 
-      <p
-        v-if="isLoading"
-        class="state-message"
-      >
-        Loading clinic workspaces...
-      </p>
+      <p v-if="isLoading" class="state-message">Loading clinic workspaces...</p>
 
-      <p
-        v-else-if="loadError"
-        class="state-message error-message"
-      >
+      <p v-else-if="loadError" class="state-message error-message">
         {{ loadError }}
       </p>
 
-      <p
-        v-else-if="instances.length === 0"
-        class="state-message empty-message"
-      >
+      <p v-else-if="instances.length === 0" class="state-message empty-message">
         {{
           auth.isAdmin
             ? 'No clinic workspaces have been created yet.'
@@ -237,10 +207,7 @@ onMounted(() => {
         }}
       </p>
 
-      <div
-        v-else
-        class="table-wrapper"
-      >
+      <div v-else class="table-wrapper">
         <table class="instance-table">
           <thead>
             <tr>
@@ -260,38 +227,27 @@ onMounted(() => {
               v-for="instance in instances"
               :key="instance.id"
               :class="{
-                'selected-row':
-                  selectedInstance?.id === instance.id,
+                'selected-row': selectedInstance?.id === instance.id,
               }"
             >
               <td>
                 <input
                   type="radio"
                   name="selected-clinic"
-                  :checked="
-                    selectedInstance?.id === instance.id
-                  "
+                  :checked="selectedInstance?.id === instance.id"
                   :aria-label="`Select ${instance.name}`"
                   @change="selectInstance(instance)"
                 />
               </td>
 
               <td>
-                <button
-                  class="table-link"
-                  type="button"
-                  @click="openInstance(instance.id)"
-                >
+                <button class="table-link" type="button" @click="openInstance(instance.id)">
                   {{ instance.id }}
                 </button>
               </td>
 
               <td>
-                <button
-                  class="table-link"
-                  type="button"
-                  @click="openInstance(instance.id)"
-                >
+                <button class="table-link" type="button" @click="openInstance(instance.id)">
                   {{ instance.name }}
                 </button>
               </td>
@@ -313,29 +269,18 @@ onMounted(() => {
               </td>
 
               <td>
-                {{
-                  new Date(
-                    instance.createdAt,
-                  ).toLocaleString()
-                }}
+                {{ new Date(instance.createdAt).toLocaleString() }}
               </td>
             </tr>
           </tbody>
         </table>
       </div>
 
-      <p
-        v-if="auth.isUser"
-        class="user-note"
-      >
-        Each clinic workspace is backed by an isolated PostgreSQL
-        environment managed by VetNest.
+      <p v-if="auth.isUser" class="user-note">
+        Each clinic workspace is backed by an isolated PostgreSQL environment managed by VetNest.
       </p>
 
-      <p
-        v-if="selectedInstance"
-        class="user-note"
-      >
+      <p v-if="selectedInstance" class="user-note">
         Selected clinic:
         <strong>{{ selectedInstance.name }}</strong>
       </p>
