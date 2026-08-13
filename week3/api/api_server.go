@@ -6,6 +6,7 @@ import (
 	"time"
 
 	api "cloud3-api/internal/api"
+	"cloud3-api/internal/instance"
 	"cloud3-api/internal/user"
 
 	"github.com/google/uuid"
@@ -32,6 +33,25 @@ func (s *APIServer) forwardAs(ctx echo.Context, roles ...string) error {
 	if err := requireRoles(ctx, roles...); err != nil {
 		return err
 	}
+
+	claims, ok := ctx.Get(claimsContextKey).(*Claims)
+	if !ok || claims == nil || claims.Subject == "" {
+		return unauthorized(ctx)
+	}
+
+	request := ctx.Request()
+
+	request = request.WithContext(
+		instance.WithPrincipal(
+			request.Context(),
+			instance.Principal{
+				UserID: claims.Subject,
+				Role:   claims.Role,
+			},
+		),
+	)
+
+	ctx.SetRequest(request)
 
 	return s.forward(ctx)
 }
@@ -111,7 +131,7 @@ func (s *APIServer) ListInstances(ctx echo.Context) error {
 }
 
 func (s *APIServer) CreateInstance(ctx echo.Context) error {
-	return s.forwardAs(ctx, "admin")
+	return s.forwardAs(ctx, "admin", "user")
 }
 
 func (s *APIServer) GetInstance(ctx echo.Context, _ api.InstanceID) error {

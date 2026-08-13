@@ -62,7 +62,14 @@ func (s *MemoryStorage) Get(ctx context.Context, id string) (DBInstance, error) 
 }
 
 // POST/instances
-func (s *MemoryStorage) Create(ctx context.Context, r CreateInstanceRequest) (DBInstance, error) {
+func (s *MemoryStorage) Create(ctx context.Context, r CreateInstanceRequest, ownerID string) (DBInstance, error) {
+	ownerID = strings.TrimSpace(ownerID)
+	if ownerID == "" {
+		return DBInstance{}, fmt.Errorf(
+			"%w: owner id is required",
+			ErrInvalidInstance,
+		)
+	}
 
 	if err := ctx.Err(); err != nil {
 		return DBInstance{}, err
@@ -111,6 +118,7 @@ func (s *MemoryStorage) Create(ctx context.Context, r CreateInstanceRequest) (DB
 	instance := DBInstance{
 		ID:        id,
 		Name:      name,
+		OwnerID: 	ownerID,
 		Instances: r.Instances,
 		Storage:   storage,
 		CPU:       cpu,

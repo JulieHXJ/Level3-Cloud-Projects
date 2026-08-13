@@ -10,6 +10,7 @@ import (
 )
 
 const testCreatedAt = "2026-08-05T11:36:16Z"
+const testOwnerID = "11111111-1111-1111-1111-111111111111"
 
 type testStore struct {
 	*MemoryStorage
@@ -55,15 +56,24 @@ func newTestMux(store InstanceStore) *http.ServeMux {
 // Content-Type: application/json
 func performRequest(t *testing.T, handler http.Handler, method string, path string, body []byte, contentType string,
 ) *httptest.ResponseRecorder {
-	t.Helper() // report error location
+	t.Helper()
 
-	request := httptest.NewRequest(method, path, bytes.NewReader(body))
+	request := httptest.NewRequest(
+		method,
+		path,
+		bytes.NewReader(body),
+	)
+
+	// All instance API tests simulate an authenticated normal user.
+	request = withTestPrincipal(request)
+
 	if contentType != "" {
 		request.Header.Set("Content-Type", contentType)
 	}
 
 	recorder := httptest.NewRecorder()
-	handler.ServeHTTP(recorder, request) // pass request to router and write response to recorder
+	handler.ServeHTTP(recorder, request)
+
 	return recorder
 }
 
@@ -84,15 +94,26 @@ func decodeResponse[T any](t *testing.T, recorder *httptest.ResponseRecorder) T 
 
 func createTestInstance(t *testing.T, store InstanceStore, name string, instances int) DBInstance {
 	t.Helper()
+
 	instance, err := store.Create(
 		context.Background(),
 		CreateInstanceRequest{
 			Name:      name,
 			Instances: instances,
 		},
+		testOwnerID,
 	)
+
 	if err != nil {
 		t.Fatalf("failed to create test instance: %v", err)
+	}
+
+	if instance.OwnerID != testOwnerID {
+		t.Fatalf(
+			"expected owner ID %q, got %q",
+			testOwnerID,
+			instance.OwnerID,
+		)
 	}
 
 	return instance
@@ -533,4 +554,16 @@ func TestGetConnectionNotReady(t *testing.T) {
 			recorder.Body.String(),
 		)
 	}
+}
+
+func withTestPrincipal(r *http.Request) *http.Request {
+	ctx := WithPrincipal(
+		r.Context(),
+		Principal{
+			UserID: testOwnerID,
+			Role:   "user",
+		},
+	)
+
+	return r.WithContext(ctx)
 }

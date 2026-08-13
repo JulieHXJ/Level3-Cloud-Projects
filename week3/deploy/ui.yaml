@@ -1,0 +1,84 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: cloud3-ui
+  namespace: postgres-demo
+  labels:
+    app: cloud3-ui
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: cloud3-ui
+  template:
+    metadata:
+      labels:
+        app: cloud3-ui
+    spec:
+      imagePullSecrets:
+        - name: stackit-registry
+
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+
+      containers:
+        - name: cloud3-ui
+          image: registry.onstackit.cloud/level3_julie/cloud3-ui:v0.1.0
+          imagePullPolicy: IfNotPresent
+
+          ports:
+            - name: http
+              containerPort: 8080
+              protocol: TCP
+
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            initialDelaySeconds: 3
+            periodSeconds: 10
+            timeoutSeconds: 2
+            failureThreshold: 3
+
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 20
+            timeoutSeconds: 2
+            failureThreshold: 3
+
+          resources:
+            requests:
+              cpu: 25m
+              memory: 32Mi
+            limits:
+              cpu: 200m
+              memory: 128Mi
+
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: cloud3-ui
+  namespace: postgres-demo
+  labels:
+    app: cloud3-ui
+spec:
+  type: ClusterIP
+  selector:
+    app: cloud3-ui
+  ports:
+    - name: http
+      port: 80
+      targetPort: http
+      protocol: TCP

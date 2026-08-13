@@ -67,7 +67,17 @@ func (h *Handler) createInstances(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	instance, err := h.store.Create(r.Context(), request)
+	principal, ok := PrincipalFromContext(r.Context())
+	if !ok || principal.UserID == "" {
+		printError(
+			w,
+			http.StatusUnauthorized,
+			"authenticated user identity is missing",
+		)
+		return
+	}
+
+	instance, err := h.store.Create(r.Context(), request, principal.UserID)
 	if err != nil {
 		log.Println("failed to create instance:", err)
 		printError(w, http.StatusInternalServerError, "failed to create instance")

@@ -20,7 +20,7 @@ import (
 const (
 	managedByLabelKey   = "app.kubernetes.io/managed-by"
 	managedByLabelValue = "paas-api"
-
+	ownerIDLabelKey = "paas-api/owner-id"
 	displayNameAnnotation = "paas-api/name"
 )
 
@@ -195,7 +195,16 @@ func (s *KubeStorage) GetConnection(ctx context.Context, id string) (ConnectionI
 	}, nil
 }
 
-func (s *KubeStorage) Create(ctx context.Context, request CreateInstanceRequest) (DBInstance, error) {
+func (s *KubeStorage) Create(ctx context.Context, request CreateInstanceRequest, ownerID string) (DBInstance, error) {
+
+	ownerID = strings.TrimSpace(ownerID)
+	if ownerID == "" {
+		return DBInstance{}, fmt.Errorf(
+			"%w: owner id is required",
+			ErrInvalidInstance,
+		)
+	}
+
 	name := strings.TrimSpace(request.Name)
 	if name == "" {
 		return DBInstance{}, fmt.Errorf(
@@ -239,6 +248,7 @@ func (s *KubeStorage) Create(ctx context.Context, request CreateInstanceRequest)
 
 				"labels": map[string]interface{}{
 					managedByLabelKey: managedByLabelValue,
+					ownerIDLabelKey:   ownerID,
 				},
 
 				"annotations": map[string]interface{}{
@@ -446,6 +456,8 @@ func (s *KubeStorage) Delete(ctx context.Context, id string) error {
 func clusterToDBInstance(cluster *unstructured.Unstructured) (DBInstance, error) {
 	id := cluster.GetName()
 	name := id
+	labels := cluster.GetLabels()
+	ownerID := labels[ownerIDLabelKey]
 	annotations := cluster.GetAnnotations()
 
 	if annotationName, ok :=
@@ -548,6 +560,7 @@ func clusterToDBInstance(cluster *unstructured.Unstructured) (DBInstance, error)
 	return DBInstance{
 		ID:        id,
 		Name:      name,
+		OwnerID:   ownerID,
 		Instances: int(instanceCount),
 		Storage:   storage,
 		CPU:       cpu,

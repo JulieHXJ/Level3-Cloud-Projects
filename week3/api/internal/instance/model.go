@@ -3,6 +3,7 @@ package instance
 type DBInstance struct {
 	ID        string `json:"id"`
 	Name      string `json:"name"`
+	OwnerID   string `json:"-"`
 	Instances int    `json:"instances"`
 	Storage   string `json:"storage"`
 	CPU       string `json:"cpu"`

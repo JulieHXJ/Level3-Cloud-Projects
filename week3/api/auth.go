@@ -148,7 +148,7 @@ func (a *authService) login(ctx echo.Context) error {
 		Role: string(dbUser.Role),
 		RegisteredClaims: jwt.RegisteredClaims{
 			Issuer:    jwtIssuer,
-			Subject:   dbUser.Username,
+			Subject:   dbUser.ID,
 			IssuedAt:  jwt.NewNumericDate(now),
 			NotBefore: jwt.NewNumericDate(now),
 			ExpiresAt: jwt.NewNumericDate(now.Add(tokenTTL)),

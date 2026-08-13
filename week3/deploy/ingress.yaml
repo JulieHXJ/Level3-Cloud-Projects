@@ -22,3 +22,11 @@ spec:
                 name: cloud3-api
                 port:
                   number: 80
+
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: cloud3-ui
+                port:
+                  number: 80

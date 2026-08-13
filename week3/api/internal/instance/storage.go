@@ -20,7 +20,7 @@ const (
 type InstanceStore interface {
 	List(ctx context.Context) ([]DBInstance, error) //func, param, return type succeed and fail
 	Get(ctx context.Context, id string) (DBInstance, error)
-	Create(ctx context.Context, r CreateInstanceRequest) (DBInstance, error)
+	Create(ctx context.Context, r CreateInstanceRequest, ownerID string) (DBInstance, error)
 	Patch(ctx context.Context, id string, r PatchInstanceRequest) (DBInstance, error)
 	Delete(ctx context.Context, id string) error
 }
