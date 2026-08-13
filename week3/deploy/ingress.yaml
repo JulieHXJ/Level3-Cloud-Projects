@@ -3,6 +3,8 @@ kind: Ingress
 metadata:
   name: cloud3-api
   namespace: postgres-demo
+  annotations:
+    traefik.ingress.kubernetes.io/router.middlewares: postgres-demo-redirect-to-https@kubernetescrd
 spec:
   ingressClassName: traefik
 
