@@ -24,5 +24,7 @@ spec:
               created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
           );
 
+          ALTER TABLE users OWNER TO cloud3_app;
+
   storage:
     size: 1Gi

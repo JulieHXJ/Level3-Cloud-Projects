@@ -2,11 +2,14 @@ package main
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"os"
 	"strings"
 	"time"
+
+	"cloud3-api/internal/user"
 
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/labstack/echo/v4"
@@ -38,39 +41,21 @@ type Claims struct {
 	jwt.RegisteredClaims
 }
 
-// temp record for user
-type authUser struct {
-	passwordHash []byte
-	role         string
-}
-
 // link the authentication data to user group
 type authService struct {
 	secret        []byte
-	users         map[string]authUser
+	users         user.UserStore
 	dummyPassHash []byte //preserve time for non-existing user
 }
 
 // get jwt secrect and create authService
 // currently read from env
-func newAuthService() (*authService, error) {
+func newAuthService(userStore user.UserStore) (*authService, error) {
 	secret := os.Getenv("JWT_SECRET")
 	if len(secret) < 32 {
 		return nil, fmt.Errorf(
 			"JWT_SECRET must contain at least 32 characters",
 		)
-	}
-
-	adminPasswordHash, err :=
-		readPasswordHashFromEnv("ADMIN_PASSWORD_HASH")
-	if err != nil {
-		return nil, err
-	}
-
-	viewerPasswordHash, err :=
-		readPasswordHashFromEnv("VIEWER_PASSWORD_HASH")
-	if err != nil {
-		return nil, err
 	}
 
 	dummyPasswordHash, err := bcrypt.GenerateFromPassword(
@@ -85,17 +70,8 @@ func newAuthService() (*authService, error) {
 	}
 
 	return &authService{
-		secret: []byte(secret),
-		users: map[string]authUser{
-			"platform-admin": {
-				passwordHash: adminPasswordHash,
-				role:         "admin",
-			},
-			"platform-viewer": {
-				passwordHash: viewerPasswordHash,
-				role:         "viewer",
-			},
-		},
+		secret:        []byte(secret),
+		users:         userStore,
 		dummyPassHash: dummyPasswordHash,
 	}, nil
 }
@@ -126,12 +102,29 @@ func (a *authService) login(ctx echo.Context) error {
 	}
 
 	request.Username = strings.TrimSpace(request.Username)
-	user, exists := a.users[request.Username] //ckeck if user is exist
+
+	dbUser, err := a.users.GetByUsername(
+		ctx.Request().Context(),
+		request.Username,
+	)
+
+	userExists := true
 	passwordHash := a.dummyPassHash
 
 	// keep comparing password, to provent attacker guessing by charactor(r.pass == user.pass)
-	if exists {
-		passwordHash = user.passwordHash
+	if err != nil {
+		if errors.Is(err, user.ErrUserNotFound) {
+			userExists = false
+		} else {
+			return ctx.JSON(
+				http.StatusInternalServerError,
+				map[string]string{
+					"error": "failed to query user",
+				},
+			)
+		}
+	} else {
+		passwordHash = []byte(dbUser.PasswordHash)
 	}
 
 	passwordMatches := bcrypt.CompareHashAndPassword(
@@ -140,7 +133,7 @@ func (a *authService) login(ctx echo.Context) error {
 	) == nil
 
 	// user not exist / wrong password (don't return seperately! risky!)
-	if !exists || !passwordMatches {
+	if !userExists || !passwordMatches {
 		return ctx.JSON(
 			http.StatusUnauthorized,
 			map[string]string{
@@ -152,7 +145,7 @@ func (a *authService) login(ctx echo.Context) error {
 	now := time.Now().UTC()
 
 	claims := Claims{
-		Role: user.role,
+		Role: string(dbUser.Role),
 		RegisteredClaims: jwt.RegisteredClaims{
 			Issuer:    jwtIssuer,
 			Subject:   request.Username,
@@ -184,27 +177,7 @@ func (a *authService) login(ctx echo.Context) error {
 			Token:     signedToken,
 			TokenType: "Bearer",
 			ExpiresIn: int(tokenTTL.Seconds()),
-			Role:      user.role,
+			Role:      string(dbUser.Role),
 		},
 	)
-}
-
-// get hash
-func readPasswordHashFromEnv(name string) ([]byte, error) {
-	value := os.Getenv(name)
-	if value == "" {
-		return nil, fmt.Errorf("%s is required", name)
-	}
-
-	hash := []byte(value)
-
-	if _, err := bcrypt.Cost(hash); err != nil {
-		return nil, fmt.Errorf(
-			"%s must contain a valid bcrypt hash: %w",
-			name,
-			err,
-		)
-	}
-
-	return hash, nil
 }

@@ -52,7 +52,7 @@ func main() {
 		log.Fatal("failed to create Kubernetes storage: ", err)
 	}
 
-	auth, err := newAuthService()
+	auth, err := newAuthService(userStore)
 	if err != nil {
 		log.Fatal("failed to configure authentication: ", err)
 	}
@@ -78,8 +78,8 @@ func main() {
 	// Authenticate every request through middleware
 	e.Use(auth.jwtMiddleware)
 	generatedServer := &APIServer{
-		legacy: mux,
-		auth:   auth,
+		legacy:    mux,
+		auth:      auth,
 		userStore: userStore,
 	}
 
