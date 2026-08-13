@@ -45,9 +45,17 @@ func (s *APIServer) RegisterUser(ctx echo.Context) error {
 		})
 	}
 
+	// if empoty
 	if req.Username == "" || req.Password == "" {
 		return ctx.JSON(http.StatusBadRequest, api.ErrorResponse{
 			Error: "username and password are required",
+		})
+	}
+
+	// abay the password policy
+	if err := user.ValidatePassword(req.Password); err != nil {
+		return ctx.JSON(http.StatusBadRequest, api.ErrorResponse{
+			Error: err.Error(),
 		})
 	}
 
