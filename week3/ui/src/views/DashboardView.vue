@@ -3,6 +3,8 @@ import { onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '../stores/auth'
 import CreateInstanceModal from '../components/CreateInstanceModal.vue'
+import UpdateInstanceModal from '../components/UpdateInstanceModal.vue'
+import DeleteInstanceModal from '../components/DeleteInstanceModal.vue'
 
 const router = useRouter()
 const auth = useAuthStore()
@@ -11,6 +13,10 @@ const instances = ref([])
 const isLoading = ref(false)
 const loadError = ref('')
 const showCreateModal = ref(false)
+const selectedInstance = ref(null)
+
+const showUpdateModal = ref(false)
+const showDeleteModal = ref(false)
 
 async function loadInstances() {
   isLoading.value = true
@@ -32,11 +38,7 @@ async function loadInstances() {
     }
 
     if (!response.ok) {
-      throw new Error(
-        body.message ||
-          body.error ||
-          `Failed to load instances: ${response.status}`,
-      )
+      throw new Error(body.message || body.error || `Failed to load instances: ${response.status}`)
     }
 
     if (!Array.isArray(body)) {
@@ -45,8 +47,7 @@ async function loadInstances() {
 
     instances.value = body
   } catch (error) {
-    loadError.value =
-      error instanceof Error ? error.message : 'Failed to load instances'
+    loadError.value = error instanceof Error ? error.message : 'Failed to load instances'
   } finally {
     isLoading.value = false
   }
@@ -59,6 +60,38 @@ function openInstance(instanceId) {
 function handleLogout() {
   auth.logout()
   router.push('/login')
+}
+
+function selectInstance(instance) {
+  selectedInstance.value = instance
+}
+
+function openUpdateModal() {
+  if (!selectedInstance.value) {
+    return
+  }
+
+  showUpdateModal.value = true
+}
+
+function openDeleteModal() {
+  if (!selectedInstance.value) {
+    return
+  }
+
+  showDeleteModal.value = true
+}
+
+async function handleUpdated() {
+  showUpdateModal.value = false
+  selectedInstance.value = null
+  await loadInstances()
+}
+
+async function handleDeleted() {
+  showDeleteModal.value = false
+  selectedInstance.value = null
+  await loadInstances()
 }
 
 onMounted(() => {
@@ -77,9 +110,7 @@ onMounted(() => {
         </p>
       </div>
 
-      <button class="logout-button" @click="handleLogout">
-        Logout
-      </button>
+      <button class="logout-button" @click="handleLogout">Logout</button>
     </header>
 
     <section class="dashboard-panel">
@@ -87,17 +118,12 @@ onMounted(() => {
         <div>
           <h2>PostgreSQL Instances</h2>
           <p class="panel-subtitle">
-            {{ auth.isAdmin ? 'Instance administration' : 'Read-only access' }}
+            {{ auth.isAdmin ? 'All platform instances' : 'My PostgreSQL instances' }}
           </p>
         </div>
 
-        <button
-            v-if="auth.isAdmin"
-            class="primary-button"
-            type="button"
-            @click="showCreateModal = true"
-        >
-            Create instance
+        <button class="primary-button" type="button" @click="showCreateModal = true">
+          Create instance
         </button>
       </div>
 
@@ -108,17 +134,19 @@ onMounted(() => {
         </div>
 
         <button
-          v-if="auth.isAdmin"
           type="button"
           class="toolbar-card action-card"
+          :disabled="!selectedInstance"
+          @click="openUpdateModal"
         >
           Update instance
         </button>
 
         <button
-          v-if="auth.isAdmin"
           type="button"
           class="toolbar-card action-card danger-card"
+          :disabled="!selectedInstance"
+          @click="openDeleteModal"
         >
           Delete instance
         </button>
@@ -138,6 +166,7 @@ onMounted(() => {
         <table class="instance-table">
           <thead>
             <tr>
+              <th>Select</th>
               <th>ID</th>
               <th>Name</th>
               <th>Instances</th>
@@ -151,21 +180,21 @@ onMounted(() => {
           <tbody>
             <tr v-for="instance in instances" :key="instance.id">
               <td>
-                <button
-                  class="table-link"
-                  type="button"
-                  @click="openInstance(instance.id)"
-                >
+                <input
+                  type="radio"
+                  name="selected-instance"
+                  :checked="selectedInstance?.id === instance.id"
+                  @change="selectInstance(instance)"
+                />
+              </td>
+              <td>
+                <button class="table-link" type="button" @click="openInstance(instance.id)">
                   {{ instance.id }}
                 </button>
               </td>
 
               <td>
-                <button
-                  class="table-link"
-                  type="button"
-                  @click="openInstance(instance.id)"
-                >
+                <button class="table-link" type="button" @click="openInstance(instance.id)">
                   {{ instance.name }}
                 </button>
               </td>
@@ -180,15 +209,28 @@ onMounted(() => {
         </table>
       </div>
 
-      <p v-if="auth.isViewer" class="viewer-note">
-        Viewer can view instances and details, but cannot create, update, or delete.
+      <p v-if="auth.isUser" class="user-note">
+        You can create and manage PostgreSQL instances owned by your account.
       </p>
     </section>
     <CreateInstanceModal
-        v-if="showCreateModal"
-        @close="showCreateModal = false"
-        @created="loadInstances"
+      v-if="showCreateModal"
+      @close="showCreateModal = false"
+      @created="loadInstances"
+    />
+
+    <UpdateInstanceModal
+      v-if="showUpdateModal && selectedInstance"
+      :instance="selectedInstance"
+      @close="showUpdateModal = false"
+      @updated="handleUpdated"
+    />
+
+    <DeleteInstanceModal
+      v-if="showDeleteModal && selectedInstance"
+      :instance="selectedInstance"
+      @close="showDeleteModal = false"
+      @deleted="handleDeleted"
     />
   </main>
 </template>
-

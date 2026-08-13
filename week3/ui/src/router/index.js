@@ -40,12 +40,12 @@ const router = createRouter({
       },
     },
     {
-      path: '/viewer/dashboard',
-      name: 'viewer-dashboard',
+      path: '/user/dashboard',
+      name: 'user-dashboard',
       component: DashboardView,
       meta: {
         requiresAuth: true,
-        roles: ['viewer'],
+        roles: ['user'],
       },
     },
     {
@@ -58,7 +58,7 @@ const router = createRouter({
       component: InstanceDetailView,
       meta: {
         requiresAuth: true,
-        roles: ['admin', 'viewer'],
+        roles: ['admin', 'user'],
       },
     },
   ],

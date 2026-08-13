@@ -43,9 +43,7 @@ async function handleLogin() {
         <div class="login-heading">
           <h2>Welcome back</h2>
 
-          <p>
-            Sign in to manage your instances.
-          </p>
+          <p>Sign in to manage your instances.</p>
         </div>
 
         <form class="form" @submit.prevent="handleLogin">

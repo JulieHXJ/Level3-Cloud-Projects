@@ -8,19 +8,19 @@ export const useAuthStore = defineStore('auth', () => {
   const username = ref(sessionStorage.getItem('cloud3-username') || '')
 
   const isAuthenticated = computed(() => {
-    return Boolean(token.value && role.value)
+    return Boolean(token.value && (role.value === 'admin' || role.value === 'user'))
   })
 
   const isAdmin = computed(() => role.value === 'admin')
-  const isViewer = computed(() => role.value === 'viewer')
+  const isUser = computed(() => role.value === 'user')
 
   const dashboardPath = computed(() => {
     if (role.value === 'admin') {
       return '/admin/dashboard'
     }
 
-    if (role.value === 'viewer') {
-      return '/viewer/dashboard'
+    if (role.value === 'user') {
+      return '/user/dashboard'
     }
 
     return '/login'
@@ -33,6 +33,29 @@ export const useAuthStore = defineStore('auth', () => {
 
     return `${tokenType.value} ${token.value}`
   })
+
+  async function register(registerUsername, password) {
+    const response = await fetch('/api/v1/auth/register', {
+      method: 'POST',
+
+      headers: {
+        'Content-Type': 'application/json',
+      },
+
+      body: JSON.stringify({
+        username: registerUsername,
+        password,
+      }),
+    })
+
+    const body = await response.json().catch(() => ({}))
+
+    if (!response.ok) {
+      throw new Error(body.message || body.error || `Registration failed: ${response.status}`)
+    }
+
+    return body
+  }
 
   async function login(loginUsername, password) {
     const response = await fetch('/api/v1/auth/login', {
@@ -58,7 +81,7 @@ export const useAuthStore = defineStore('auth', () => {
       throw new Error('Login response does not contain a token')
     }
 
-    if (body.role !== 'admin' && body.role !== 'viewer') {
+    if (body.role !== 'admin' && body.role !== 'user') {
       throw new Error('Login response contains an unsupported role')
     }
 
@@ -90,11 +113,15 @@ export const useAuthStore = defineStore('auth', () => {
     tokenType,
     role,
     username,
+
     isAuthenticated,
     isAdmin,
-    isViewer,
+    isUser,
+
     dashboardPath,
     authorizationHeader,
+
+    register,
     login,
     logout,
   }
