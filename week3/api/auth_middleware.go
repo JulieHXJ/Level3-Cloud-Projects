@@ -69,13 +69,13 @@ func (a *authService) jwtMiddleware(next echo.HandlerFunc) echo.HandlerFunc {
 		}
 
 		// These fields are required by my application,
-		// clarify which user token belongs to: admin / viewer
+		// Only supported platform roles are accepted.
 		if claims.Subject == "" {
 			return unauthorized(ctx)
 		}
 
 		if claims.Role != "admin" &&
-			claims.Role != "viewer" {
+			claims.Role != "user" {
 			return unauthorized(ctx)
 		}
 

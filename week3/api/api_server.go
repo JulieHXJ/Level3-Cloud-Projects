@@ -98,9 +98,8 @@ func (s *APIServer) GetHealth(ctx echo.Context) error {
 	return s.forward(ctx)
 }
 
-// only admin and viewer can access.
 func (s *APIServer) ListInstances(ctx echo.Context) error {
-	return s.forwardAs(ctx, "admin", "viewer")
+	return s.forwardAs(ctx, "admin")
 }
 
 func (s *APIServer) CreateInstance(ctx echo.Context) error {
@@ -108,7 +107,7 @@ func (s *APIServer) CreateInstance(ctx echo.Context) error {
 }
 
 func (s *APIServer) GetInstance(ctx echo.Context, _ api.InstanceID) error {
-	return s.forwardAs(ctx, "admin", "viewer")
+	return s.forwardAs(ctx, "admin")
 }
 
 func (s *APIServer) PatchInstance(ctx echo.Context, _ api.InstanceID) error {
