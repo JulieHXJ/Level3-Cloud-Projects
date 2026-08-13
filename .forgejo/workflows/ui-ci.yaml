@@ -1,0 +1,125 @@
+name: UI CI
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "week3/ui/**"
+      - ".forgejo/workflows/ui-ci.yaml"
+
+  pull_request:
+    branches:
+      - main
+    paths:
+      - "week3/ui/**"
+      - ".forgejo/workflows/ui-ci.yaml"
+
+  workflow_dispatch:
+
+concurrency:
+  group: ui-week3-${{ forgejo.ref }}
+  cancel-in-progress: false
+
+env:
+  REGISTRY: registry.onstackit.cloud
+  IMAGE_REPOSITORY: level3_julie/cloud3-ui
+  IMAGE_TAG: ${{ forgejo.sha }}
+
+jobs:
+  ui-ci:
+    name: Lint, build and publish
+    runs-on: stackit-ubuntu-22
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      # ----------------------------
+      # Frontend checks
+      # ----------------------------
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: week3/ui/package-lock.json
+
+      - name: Install dependencies
+        working-directory: week3/ui
+        run: npm ci
+
+      - name: Run lint
+        working-directory: week3/ui
+        run: npm run lint
+
+      - name: Build UI
+        working-directory: week3/ui
+        run: npm run build
+
+      # ----------------------------
+      # Container image
+      # Only publish from main push,
+      # not from pull requests.
+      # ----------------------------
+      - name: Check Docker availability
+        if: ${{ success() && forgejo.ref == 'refs/heads/main' && forgejo.event_name != 'pull_request' }}
+        run: docker version
+
+      - name: Login to STACKIT Container Registry
+        if: ${{ success() && forgejo.ref == 'refs/heads/main' && forgejo.event_name != 'pull_request' }}
+        env:
+          REGISTRY_USERNAME: ${{ secrets.STACKIT_REGISTRY_USERNAME }}
+          REGISTRY_TOKEN: ${{ secrets.STACKIT_REGISTRY_TOKEN }}
+        run: |
+          printf '%s' "$REGISTRY_TOKEN" |
+            docker login "$REGISTRY" \
+              --username "$REGISTRY_USERNAME" \
+              --password-stdin
+
+      - name: Build container image
+        if: ${{ success() && forgejo.ref == 'refs/heads/main' && forgejo.event_name != 'pull_request' }}
+        run: |
+          docker build \
+            --tag "$REGISTRY/$IMAGE_REPOSITORY:$IMAGE_TAG" \
+            week3/ui
+
+      - name: Push container image
+        if: ${{ success() && forgejo.ref == 'refs/heads/main' && forgejo.event_name != 'pull_request' }}
+        run: |
+          docker push "$REGISTRY/$IMAGE_REPOSITORY:$IMAGE_TAG"
+
+      # ----------------------------
+      # GitOps
+      # ----------------------------
+      - name: Update GitOps manifest
+        if: ${{ success() && forgejo.ref == 'refs/heads/main' && forgejo.event_name != 'pull_request' }}
+        run: |
+          IMAGE="$REGISTRY/$IMAGE_REPOSITORY:$IMAGE_TAG"
+
+          sed -i \
+            "s#image: $REGISTRY/$IMAGE_REPOSITORY:.*#image: $IMAGE#" \
+            week3/deploy/ui.yaml
+
+          grep "image:" week3/deploy/ui.yaml
+
+      - name: Commit GitOps manifest
+        if: ${{ success() && forgejo.ref == 'refs/heads/main' && forgejo.event_name != 'pull_request' }}
+        run: |
+          if git diff --quiet -- week3/deploy/ui.yaml; then
+            echo "UI deployment manifest has not changed."
+            exit 0
+          fi
+
+          git config user.name "forgejo-actions"
+          git config user.email "forgejo-actions@local"
+
+          git add week3/deploy/ui.yaml
+          git commit -m "deploy(ui): update image to $IMAGE_TAG"
+          git push origin HEAD:main
+
+      - name: Logout from Registry
+        if: ${{ always() && forgejo.ref == 'refs/heads/main' && forgejo.event_name != 'pull_request' }}
+        run: docker logout "$REGISTRY" || true
