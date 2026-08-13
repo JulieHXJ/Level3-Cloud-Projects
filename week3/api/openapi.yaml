@@ -337,6 +337,34 @@ components:
           type: string
           format: password
 
+    UserResponse:
+      type: object
+      required:
+        - id
+        - username
+        - role
+        - createdAt
+      properties:
+        id:
+          type: string
+          format: uuid
+          example: 550e8400-e29b-41d4-a716-446655440000
+        username:
+          type: string
+          example: alice
+        role:
+          $ref: "#/components/schemas/UserRole"
+        createdAt:
+          type: string
+          format: date-time
+          example: "2026-08-13T10:00:00Z"
+
+
+
+
+
+
+
     LoginRequest:
       type: object
       required:
@@ -348,7 +376,7 @@ components:
           minLength: 1
           example: admin
         password:
-          Type: string
+          type: string
           format: password
           minLength: 1
           example: admin-pass
@@ -380,8 +408,8 @@ components:
       type: string
       enum:
         - admin
-        - viewer
-      example: viewer
+        - user
+      example: user
 
     HealthResponse:
       type: object

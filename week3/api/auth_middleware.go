@@ -29,7 +29,8 @@ func (a *authService) jwtMiddleware(next echo.HandlerFunc) echo.HandlerFunc {
 		}
 
 		if request.Method == http.MethodPost &&
-			request.URL.Path == "/api/v1/auth/login" {
+			(request.URL.Path == "/api/v1/auth/login" ||
+				request.URL.Path == "/api/v1/auth/register") {
 			return next(ctx)
 		}
 

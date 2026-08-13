@@ -80,6 +80,7 @@ func main() {
 	generatedServer := &APIServer{
 		legacy: mux,
 		auth:   auth,
+		userStore: userStore,
 	}
 
 	// Register every route generated from openapi.yaml.
