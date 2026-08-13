@@ -12,6 +12,10 @@ import (
 const testCreatedAt = "2026-08-05T11:36:16Z"
 const testOwnerID = "11111111-1111-1111-1111-111111111111"
 
+const otherOwnerID = "22222222-2222-2222-2222-222222222222"
+
+const testAdminID = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"
+
 type testStore struct {
 	*MemoryStorage
 	connections map[string]ConnectionInfo
@@ -56,6 +60,29 @@ func newTestMux(store InstanceStore) *http.ServeMux {
 // Content-Type: application/json
 func performRequest(t *testing.T, handler http.Handler, method string, path string, body []byte, contentType string,
 ) *httptest.ResponseRecorder {
+	return performRequestAs(
+		t,
+		handler,
+		method,
+		path,
+		body,
+		contentType,
+		Principal{
+			UserID: testOwnerID,
+			Role:   "user",
+		},
+	)
+}
+
+func performRequestAs(
+	t *testing.T,
+	handler http.Handler,
+	method string,
+	path string,
+	body []byte,
+	contentType string,
+	principal Principal,
+) *httptest.ResponseRecorder {
 	t.Helper()
 
 	request := httptest.NewRequest(
@@ -64,15 +91,26 @@ func performRequest(t *testing.T, handler http.Handler, method string, path stri
 		bytes.NewReader(body),
 	)
 
-	// All instance API tests simulate an authenticated normal user.
-	request = withTestPrincipal(request)
+	request = request.WithContext(
+		WithPrincipal(
+			request.Context(),
+			principal,
+		),
+	)
 
 	if contentType != "" {
-		request.Header.Set("Content-Type", contentType)
+		request.Header.Set(
+			"Content-Type",
+			contentType,
+		)
 	}
 
 	recorder := httptest.NewRecorder()
-	handler.ServeHTTP(recorder, request)
+
+	handler.ServeHTTP(
+		recorder,
+		request,
+	)
 
 	return recorder
 }
@@ -93,30 +131,13 @@ func decodeResponse[T any](t *testing.T, recorder *httptest.ResponseRecorder) T 
 }
 
 func createTestInstance(t *testing.T, store InstanceStore, name string, instances int) DBInstance {
-	t.Helper()
-
-	instance, err := store.Create(
-		context.Background(),
-		CreateInstanceRequest{
-			Name:      name,
-			Instances: instances,
-		},
+	return createTestInstanceForOwner(
+		t,
+		store,
+		name,
+		instances,
 		testOwnerID,
 	)
-
-	if err != nil {
-		t.Fatalf("failed to create test instance: %v", err)
-	}
-
-	if instance.OwnerID != testOwnerID {
-		t.Fatalf(
-			"expected owner ID %q, got %q",
-			testOwnerID,
-			instance.OwnerID,
-		)
-	}
-
-	return instance
 }
 
 // GET /instances
@@ -566,4 +587,241 @@ func withTestPrincipal(r *http.Request) *http.Request {
 	)
 
 	return r.WithContext(ctx)
+}
+
+func TestListInstancesOnlyReturnsOwnedInstances(
+	t *testing.T,
+) {
+	store := newTestStore()
+
+	own := createTestInstanceForOwner(
+		t,
+		store,
+		"alice-db",
+		1,
+		testOwnerID,
+	)
+
+	createTestInstanceForOwner(
+		t,
+		store,
+		"bob-db",
+		1,
+		otherOwnerID,
+	)
+
+	recorder := performRequest(
+		t,
+		newTestMux(store),
+		http.MethodGet,
+		instancesPath,
+		nil,
+		"",
+	)
+
+	if recorder.Code != http.StatusOK {
+		t.Fatalf(
+			"expected 200, got %d; body=%s",
+			recorder.Code,
+			recorder.Body.String(),
+		)
+	}
+
+	instances :=
+		decodeResponse[[]DBInstance](
+			t,
+			recorder,
+		)
+
+	if len(instances) != 1 {
+		t.Fatalf(
+			"expected 1 owned instance, got %d",
+			len(instances),
+		)
+	}
+
+	if instances[0].ID != own.ID {
+		t.Fatalf(
+			"expected instance %q, got %q",
+			own.ID,
+			instances[0].ID,
+		)
+	}
+}
+
+func TestGetOtherUsersInstanceReturnsNotFound(
+	t *testing.T,
+) {
+	store := newTestStore()
+
+	other := createTestInstanceForOwner(
+		t,
+		store,
+		"bob-db",
+		1,
+		otherOwnerID,
+	)
+
+	recorder := performRequest(
+		t,
+		newTestMux(store),
+		http.MethodGet,
+		instancesPath+"/"+other.ID,
+		nil,
+		"",
+	)
+
+	if recorder.Code != http.StatusNotFound {
+		t.Fatalf(
+			"expected 404, got %d; body=%s",
+			recorder.Code,
+			recorder.Body.String(),
+		)
+	}
+}
+
+func TestDeleteOtherUsersInstanceReturnsNotFound(
+	t *testing.T,
+) {
+	store := newTestStore()
+
+	other := createTestInstanceForOwner(
+		t,
+		store,
+		"bob-db",
+		1,
+		otherOwnerID,
+	)
+
+	recorder := performRequest(
+		t,
+		newTestMux(store),
+		http.MethodDelete,
+		instancesPath+"/"+other.ID,
+		nil,
+		"",
+	)
+
+	if recorder.Code != http.StatusNotFound {
+		t.Fatalf(
+			"expected 404, got %d; body=%s",
+			recorder.Code,
+			recorder.Body.String(),
+		)
+	}
+
+	// Important: Bob's resource must still exist.
+	if _, err := store.Get(
+		context.Background(),
+		other.ID,
+	); err != nil {
+		t.Fatalf(
+			"other user's instance was modified: %v",
+			err,
+		)
+	}
+}
+
+func TestGetOtherUsersConnectionReturnsNotFound(
+	t *testing.T,
+) {
+	store := newTestStore()
+
+	other := createTestInstanceForOwner(
+		t,
+		store,
+		"bob-db",
+		1,
+		otherOwnerID,
+	)
+
+	store.connections[other.ID] = ConnectionInfo{
+		Host:     other.ID + "-rw",
+		Port:     "5432",
+		Database: "app",
+		Username: "app",
+		Password: "super-secret",
+	}
+
+	recorder := performRequest(
+		t,
+		newTestMux(store),
+		http.MethodGet,
+		instancesPath+
+			"/"+other.ID+
+			"/connection",
+		nil,
+		"",
+	)
+
+	if recorder.Code != http.StatusNotFound {
+		t.Fatalf(
+			"expected 404, got %d; body=%s",
+			recorder.Code,
+			recorder.Body.String(),
+		)
+	}
+}
+
+func TestAdminCanGetAnyInstance(
+	t *testing.T,
+) {
+	store := newTestStore()
+
+	other := createTestInstanceForOwner(
+		t,
+		store,
+		"bob-db",
+		1,
+		otherOwnerID,
+	)
+
+	recorder := performRequestAs(
+		t,
+		newTestMux(store),
+		http.MethodGet,
+		instancesPath+"/"+other.ID,
+		nil,
+		"",
+		Principal{
+			UserID: testAdminID,
+			Role:   "admin",
+		},
+	)
+
+	if recorder.Code != http.StatusOK {
+		t.Fatalf(
+			"expected 200, got %d; body=%s",
+			recorder.Code,
+			recorder.Body.String(),
+		)
+	}
+}
+
+func createTestInstanceForOwner(
+	t *testing.T,
+	store InstanceStore,
+	name string,
+	instances int,
+	ownerID string,
+) DBInstance {
+	t.Helper()
+
+	instance, err := store.Create(
+		context.Background(),
+		CreateInstanceRequest{
+			Name:      name,
+			Instances: instances,
+		},
+		ownerID,
+	)
+
+	if err != nil {
+		t.Fatalf(
+			"failed to create test instance: %v",
+			err,
+		)
+	}
+
+	return instance
 }

@@ -28,15 +28,50 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 // GET/instances
 // return a list of all database instances
 func (h *Handler) getInstances(w http.ResponseWriter, r *http.Request) {
-	// get list from memoryStorage
-	instanceList, err := h.store.List(r.Context())
-	if err != nil {
-		log.Println("failed to list instances:", err)
-		printError(w, http.StatusInternalServerError, "failed to list instances")
+	principal, ok := requirePrincipal(w, r)
+	if !ok {
 		return
 	}
 
-	writeJSON(w, http.StatusOK, instanceList)
+	instanceList, err := h.store.List(r.Context())
+	if err != nil {
+		log.Println("failed to list instances:", err)
+		printError(
+			w,
+			http.StatusInternalServerError,
+			"failed to list instances",
+		)
+		return
+	}
+
+	// Admin can see every managed instance.
+	if principal.Role == "admin" {
+		writeJSON(w, http.StatusOK, instanceList)
+		return
+	}
+
+	if principal.Role != "user" {
+		printError(w, http.StatusForbidden, "forbidden")
+		return
+	}
+
+	// Normal users only see their own instances.
+	ownedInstances := make([]DBInstance, 0)
+
+	for _, instance := range instanceList {
+		if instance.OwnerID == principal.UserID {
+			ownedInstances = append(
+				ownedInstances,
+				instance,
+			)
+		}
+	}
+
+	writeJSON(
+		w,
+		http.StatusOK,
+		ownedInstances,
+	)
 }
 
 // POST/instances
@@ -67,13 +102,8 @@ func (h *Handler) createInstances(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	principal, ok := PrincipalFromContext(r.Context())
-	if !ok || principal.UserID == "" {
-		printError(
-			w,
-			http.StatusUnauthorized,
-			"authenticated user identity is missing",
-		)
+	principal, ok := requirePrincipal(w, r)
+	if !ok {
 		return
 	}
 
@@ -90,15 +120,8 @@ func (h *Handler) createInstances(w http.ResponseWriter, r *http.Request) {
 
 // Get /instances/{id}
 func (h *Handler) getInstanceByID(w http.ResponseWriter, r *http.Request, id string) {
-	instance, err := h.store.Get(r.Context(), id)
-	if err != nil {
-		if errors.Is(err, ErrInstanceNotFound) {
-			printError(w, http.StatusNotFound, "instance not fount")
-			return
-		}
-
-		log.Println("failed to get instance:", err)
-		printError(w, http.StatusInternalServerError, "failed to get instance")
+	instance, ok := h.getAuthorizedInstance(w, r, id)
+	if !ok {
 		return
 	}
 
@@ -107,16 +130,30 @@ func (h *Handler) getInstanceByID(w http.ResponseWriter, r *http.Request, id str
 
 // DELETE /instances/{id}
 func (h *Handler) deleteInstance(w http.ResponseWriter, r *http.Request, id string) {
+	_, ok := h.getAuthorizedInstance(w, r, id)
+	if !ok {
+		return
+	}
+
 	err := h.store.Delete(r.Context(), id)
 	if err != nil {
 		if errors.Is(err, ErrInstanceNotFound) {
-			printError(w, http.StatusNotFound, "instance not fount")
+			printError(
+				w,
+				http.StatusNotFound,
+				"instance not found",
+			)
 			return
 		}
-		log.Println("failed to delete instance:", err)
-		printError(w, http.StatusInternalServerError, "failed to delete instance")
-		return
 
+		log.Println("failed to delete instance:", err)
+
+		printError(
+			w,
+			http.StatusInternalServerError,
+			"failed to delete instance",
+		)
+		return
 	}
 
 	w.WriteHeader(http.StatusAccepted)
@@ -124,6 +161,11 @@ func (h *Handler) deleteInstance(w http.ResponseWriter, r *http.Request, id stri
 
 // PUT /instances/{id}
 func (h *Handler) patchInstance(w http.ResponseWriter, r *http.Request, id string) {
+	_, ok := h.getAuthorizedInstance(w, r, id)
+	if !ok {
+		return
+	}
+
 	if r.Header.Get("Content-Type") != "application/json" {
 		printError(w, http.StatusUnsupportedMediaType, "Content-Type not JSON")
 		return
@@ -170,6 +212,11 @@ func (h *Handler) patchInstance(w http.ResponseWriter, r *http.Request, id strin
 
 // GET /instacnes/{id}/connection
 func (h *Handler) getConnection(w http.ResponseWriter, r *http.Request, id string) {
+	_, ok := h.getAuthorizedInstance(w, r, id)
+	if !ok {
+		return
+	}
+
 	connectionStore, ok := h.store.(ConnectionStore)
 	if !ok {
 		printError(w, http.StatusNotImplemented, "connection endpoint is not supported")
@@ -260,4 +307,77 @@ func (h *Handler) instancesIDHandler(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Allow", "GET, PATCH, DELETE")
 		printError(w, http.StatusMethodNotAllowed, "method not allowed")
 	}
+}
+
+func requirePrincipal(
+	w http.ResponseWriter,
+	r *http.Request,
+) (Principal, bool) {
+	principal, ok := PrincipalFromContext(r.Context())
+	if !ok || strings.TrimSpace(principal.UserID) == "" {
+		printError(
+			w,
+			http.StatusUnauthorized,
+			"authenticated user identity is missing",
+		)
+		return Principal{}, false
+	}
+
+	return principal, true
+}
+
+func canAccessInstance(
+	principal Principal,
+	instance DBInstance,
+) bool {
+	if principal.Role == "admin" {
+		return true
+	}
+
+	return principal.Role == "user" &&
+		instance.OwnerID != "" &&
+		instance.OwnerID == principal.UserID
+}
+
+func (h *Handler) getAuthorizedInstance(
+	w http.ResponseWriter,
+	r *http.Request,
+	id string,
+) (DBInstance, bool) {
+	principal, ok := requirePrincipal(w, r)
+	if !ok {
+		return DBInstance{}, false
+	}
+
+	instance, err := h.store.Get(r.Context(), id)
+	if err != nil {
+		if errors.Is(err, ErrInstanceNotFound) {
+			printError(
+				w,
+				http.StatusNotFound,
+				"instance not found",
+			)
+			return DBInstance{}, false
+		}
+
+		log.Println("failed to get instance:", err)
+		printError(
+			w,
+			http.StatusInternalServerError,
+			"failed to get instance",
+		)
+		return DBInstance{}, false
+	}
+
+	if !canAccessInstance(principal, instance) {
+		// Do not reveal that another user's instance exists.
+		printError(
+			w,
+			http.StatusNotFound,
+			"instance not found",
+		)
+		return DBInstance{}, false
+	}
+
+	return instance, true
 }
