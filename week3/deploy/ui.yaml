@@ -25,7 +25,7 @@ spec:
 
       containers:
         - name: cloud3-ui
-          image: registry.onstackit.cloud/level3_julie/cloud3-ui:3c26ac03051548dd9f4fb6a6ab348d217cb2822c
+          image: registry.onstackit.cloud/level3_julie/cloud3-ui:a4ad3966121169250a0a413fbeffe0080487c321
           imagePullPolicy: IfNotPresent
 
           ports:
