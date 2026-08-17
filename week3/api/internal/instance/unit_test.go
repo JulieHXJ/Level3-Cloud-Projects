@@ -9,12 +9,14 @@ import (
 	"testing"
 )
 
-const testCreatedAt = "2026-08-05T11:36:16Z"
-const testOwnerID = "11111111-1111-1111-1111-111111111111"
+const (
+	testCreatedAt = "2026-08-05T11:36:16Z"
+	testOwnerID   = "11111111-1111-1111-1111-111111111111"
+	otherOwnerID  = "22222222-2222-2222-2222-222222222222"
+	testAdminID   = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"
 
-const otherOwnerID = "22222222-2222-2222-2222-222222222222"
-
-const testAdminID = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"
+	instancesPath = "/api/v1/instances"
+)
 
 type testStore struct {
 	*MemoryStorage
@@ -42,27 +44,17 @@ func (s *testStore) GetConnection(ctx context.Context, id string) (ConnectionInf
 	return connection, nil
 }
 
-// router
-func newTestMux(store InstanceStore) *http.ServeMux {
-	handler := NewHandler(store)
-
-	mux := http.NewServeMux()
-	handler.RegisterRoutes(mux)
-
-	return mux
-}
-
 // simulate client request and get response
 // t - text object, for error reporting
 // method - GET、POST、PATCH、DELETE
 // path - /health、/instances、/instances/1
 // body - POST  JSON
 // Content-Type: application/json
-func performRequest(t *testing.T, handler http.Handler, method string, path string, body []byte, contentType string,
+func performRequest(t *testing.T, endpoint func(http.ResponseWriter, *http.Request), method string, path string, body []byte, contentType string,
 ) *httptest.ResponseRecorder {
 	return performRequestAs(
 		t,
-		handler,
+		endpoint,
 		method,
 		path,
 		body,
@@ -76,7 +68,7 @@ func performRequest(t *testing.T, handler http.Handler, method string, path stri
 
 func performRequestAs(
 	t *testing.T,
-	handler http.Handler,
+	endpoint func(http.ResponseWriter, *http.Request),
 	method string,
 	path string,
 	body []byte,
@@ -106,13 +98,44 @@ func performRequestAs(
 	}
 
 	recorder := httptest.NewRecorder()
-
-	handler.ServeHTTP(
-		recorder,
-		request,
-	)
-
+	endpoint(recorder, request)
 	return recorder
+}
+
+func getInstanceEndpoint(
+	handler *Handler,
+	id string,
+) func(http.ResponseWriter, *http.Request) {
+	return func(w http.ResponseWriter, r *http.Request) {
+		handler.GetInstance(w, r, id)
+	}
+}
+
+func patchInstanceEndpoint(
+	handler *Handler,
+	id string,
+) func(http.ResponseWriter, *http.Request) {
+	return func(w http.ResponseWriter, r *http.Request) {
+		handler.PatchInstance(w, r, id)
+	}
+}
+
+func deleteInstanceEndpoint(
+	handler *Handler,
+	id string,
+) func(http.ResponseWriter, *http.Request) {
+	return func(w http.ResponseWriter, r *http.Request) {
+		handler.DeleteInstance(w, r, id)
+	}
+}
+
+func getConnectionEndpoint(
+	handler *Handler,
+	id string,
+) func(http.ResponseWriter, *http.Request) {
+	return func(w http.ResponseWriter, r *http.Request) {
+		handler.GetInstanceConnection(w, r, id)
+	}
 }
 
 // convert JSON from response to GO struct
@@ -143,12 +166,13 @@ func createTestInstance(t *testing.T, store InstanceStore, name string, instance
 // GET /instances
 func TestListInstancesSuccess(t *testing.T) {
 	store := newTestStore()
+	handler := NewHandler(store)
 	createTestInstance(t, store, "first-database", 1)
 	createTestInstance(t, store, "second-database", 2)
 
 	recorder := performRequest(
 		t,
-		newTestMux(store),
+		handler.ListInstances,
 		http.MethodGet,
 		instancesPath,
 		nil,
@@ -172,9 +196,12 @@ func TestListInstancesSuccess(t *testing.T) {
 
 // POST /instance
 func TestCreateInstanceSuccess(t *testing.T) {
+	store := newTestStore()
+	handler := NewHandler(store)
+
 	recorder := performRequest(
 		t,
-		newTestMux(newTestStore()),
+		handler.CreateInstance,
 		http.MethodPost,
 		instancesPath,
 		[]byte(`{"name":"pet-health-db","instances":1}`),
@@ -219,9 +246,12 @@ func TestCreateInstanceSuccess(t *testing.T) {
 }
 
 func TestCreateInstanceWithResourcesSuccess(t *testing.T) {
+	store := newTestStore()
+	handler := NewHandler(store)
+
 	recorder := performRequest(
 		t,
-		newTestMux(newTestStore()),
+		handler.CreateInstance,
 		http.MethodPost,
 		instancesPath,
 		[]byte(`{
@@ -255,9 +285,11 @@ func TestCreateInstanceWithResourcesSuccess(t *testing.T) {
 
 // POST /instance missing body
 func TestCreateInstanceInvalidJSON(t *testing.T) {
+	store := newTestStore()
+	handler := NewHandler(store)
 	recorder := performRequest(
 		t,
-		newTestMux(newTestStore()),
+		handler.CreateInstance,
 		http.MethodPost,
 		instancesPath,
 		[]byte(`{"name":`),
@@ -276,9 +308,11 @@ func TestCreateInstanceInvalidJSON(t *testing.T) {
 
 // POST /instance not json
 func TestCreateInstanceUnsupportedMediaType(t *testing.T) {
+	store := newTestStore()
+	handler := NewHandler(store)
 	recorder := performRequest(
 		t,
-		newTestMux(newTestStore()),
+		handler.CreateInstance,
 		http.MethodPost,
 		instancesPath,
 		[]byte(`{"name":"pet-health-db","instances":1}`),
@@ -298,6 +332,7 @@ func TestCreateInstanceUnsupportedMediaType(t *testing.T) {
 // GET /instance/{id}
 func TestGetInstanceSuccess(t *testing.T) {
 	store := newTestStore()
+	handler := NewHandler(store)
 
 	// first create instance
 	created := createTestInstance(t, store, "pet-health-db", 1)
@@ -305,7 +340,7 @@ func TestGetInstanceSuccess(t *testing.T) {
 	// then get info
 	recorder := performRequest(
 		t,
-		newTestMux(store),
+		getInstanceEndpoint(handler, created.ID),
 		http.MethodGet,
 		instancesPath+"/"+created.ID,
 		nil,
@@ -331,9 +366,12 @@ func TestGetInstanceSuccess(t *testing.T) {
 
 // GET /instance/{id} with wrong id
 func TestGetInstanceNotFound(t *testing.T) {
+	store := newTestStore()
+	handler := NewHandler(store)
+
 	recorder := performRequest(
 		t,
-		newTestMux(newTestStore()),
+		getInstanceEndpoint(handler, "missing"),
 		http.MethodGet,
 		instancesPath+"/missing",
 		nil,
@@ -352,6 +390,7 @@ func TestGetInstanceNotFound(t *testing.T) {
 
 func TestPatchInstancePartialUpdateSuccess(t *testing.T) {
 	store := newTestStore()
+	handler := NewHandler(store)
 	created := createTestInstance(
 		t,
 		store,
@@ -361,7 +400,7 @@ func TestPatchInstancePartialUpdateSuccess(t *testing.T) {
 
 	recorder := performRequest(
 		t,
-		newTestMux(store),
+		patchInstanceEndpoint(handler, created.ID),
 		http.MethodPatch,
 		instancesPath+"/"+created.ID,
 		[]byte(`{"storage":"5Gi"}`),
@@ -383,7 +422,6 @@ func TestPatchInstancePartialUpdateSuccess(t *testing.T) {
 		t.Fatalf("expected storage=5Gi, got %q", instance.Storage)
 	}
 
-	// 没有出现在 PATCH body 中的字段必须保持不变。
 	if instance.Name != created.Name {
 		t.Fatalf(
 			"expected name to remain %q, got %q",
@@ -411,6 +449,7 @@ func TestPatchInstancePartialUpdateSuccess(t *testing.T) {
 
 func TestPatchInstanceRejectsStorageDecrease(t *testing.T) {
 	store := newTestStore()
+	handler := NewHandler(store)
 	created := createTestInstance(
 		t,
 		store,
@@ -418,9 +457,10 @@ func TestPatchInstanceRejectsStorageDecrease(t *testing.T) {
 		1,
 	)
 
+	// increase storage
 	firstPatch := performRequest(
 		t,
-		newTestMux(store),
+		patchInstanceEndpoint(handler, created.ID),
 		http.MethodPatch,
 		instancesPath+"/"+created.ID,
 		[]byte(`{"storage":"10Gi"}`),
@@ -435,9 +475,10 @@ func TestPatchInstanceRejectsStorageDecrease(t *testing.T) {
 		)
 	}
 
+	//decrease storage
 	recorder := performRequest(
 		t,
-		newTestMux(store),
+		patchInstanceEndpoint(handler, created.ID),
 		http.MethodPatch,
 		instancesPath+"/"+created.ID,
 		[]byte(`{"storage":"5Gi"}`),
@@ -457,11 +498,12 @@ func TestPatchInstanceRejectsStorageDecrease(t *testing.T) {
 // DELETE /instance/{id}
 func TestDeleteInstanceSuccess(t *testing.T) {
 	store := newTestStore()
+	handler := NewHandler(store)
 	created := createTestInstance(t, store, "pet-health-db", 1)
 
 	recorder := performRequest(
 		t,
-		newTestMux(store),
+		deleteInstanceEndpoint(handler, created.ID),
 		http.MethodDelete,
 		instancesPath+"/"+created.ID,
 		nil,
@@ -488,9 +530,11 @@ func TestDeleteInstanceSuccess(t *testing.T) {
 }
 
 func TestDeleteInstanceNotFound(t *testing.T) {
+	store := newTestStore()
+	handler := NewHandler(store)
 	recorder := performRequest(
 		t,
-		newTestMux(newTestStore()),
+		deleteInstanceEndpoint(handler, "missing"),
 		http.MethodDelete,
 		instancesPath+"/missing",
 		nil,
@@ -510,6 +554,7 @@ func TestDeleteInstanceNotFound(t *testing.T) {
 // GET /instance/{id}/connection
 func TestGetConnectionSuccess(t *testing.T) {
 	store := newTestStore()
+	handler := NewHandler(store)
 	created := createTestInstance(t, store, "pet-health-db", 1)
 
 	store.connections[created.ID] = ConnectionInfo{
@@ -525,7 +570,7 @@ func TestGetConnectionSuccess(t *testing.T) {
 
 	recorder := performRequest(
 		t,
-		newTestMux(store),
+		getConnectionEndpoint(handler, created.ID),
 		http.MethodGet,
 		instancesPath+"/"+created.ID+"/connection",
 		nil,
@@ -556,11 +601,12 @@ func TestGetConnectionSuccess(t *testing.T) {
 
 func TestGetConnectionNotReady(t *testing.T) {
 	store := newTestStore()
+	handler := NewHandler(store)
 	created := createTestInstance(t, store, "pet-health-db", 1)
 
 	recorder := performRequest(
 		t,
-		newTestMux(store),
+		getConnectionEndpoint(handler, created.ID),
 		http.MethodGet,
 		instancesPath+"/"+created.ID+"/connection",
 		nil,
@@ -577,22 +623,23 @@ func TestGetConnectionNotReady(t *testing.T) {
 	}
 }
 
-func withTestPrincipal(r *http.Request) *http.Request {
-	ctx := WithPrincipal(
-		r.Context(),
-		Principal{
-			UserID: testOwnerID,
-			Role:   "user",
-		},
-	)
+// func withTestPrincipal(r *http.Request) *http.Request {
+// 	ctx := WithPrincipal(
+// 		r.Context(),
+// 		Principal{
+// 			UserID: testOwnerID,
+// 			Role:   "user",
+// 		},
+// 	)
 
-	return r.WithContext(ctx)
-}
+// 	return r.WithContext(ctx)
+// }
 
 func TestListInstancesOnlyReturnsOwnedInstances(
 	t *testing.T,
 ) {
 	store := newTestStore()
+	handler := NewHandler(store)
 
 	own := createTestInstanceForOwner(
 		t,
@@ -612,7 +659,7 @@ func TestListInstancesOnlyReturnsOwnedInstances(
 
 	recorder := performRequest(
 		t,
-		newTestMux(store),
+		handler.ListInstances,
 		http.MethodGet,
 		instancesPath,
 		nil,
@@ -653,6 +700,7 @@ func TestGetOtherUsersInstanceReturnsNotFound(
 	t *testing.T,
 ) {
 	store := newTestStore()
+	handler := NewHandler(store)
 
 	other := createTestInstanceForOwner(
 		t,
@@ -664,7 +712,7 @@ func TestGetOtherUsersInstanceReturnsNotFound(
 
 	recorder := performRequest(
 		t,
-		newTestMux(store),
+		getInstanceEndpoint(handler, other.ID),
 		http.MethodGet,
 		instancesPath+"/"+other.ID,
 		nil,
@@ -684,7 +732,7 @@ func TestDeleteOtherUsersInstanceReturnsNotFound(
 	t *testing.T,
 ) {
 	store := newTestStore()
-
+	handler := NewHandler(store)
 	other := createTestInstanceForOwner(
 		t,
 		store,
@@ -695,7 +743,7 @@ func TestDeleteOtherUsersInstanceReturnsNotFound(
 
 	recorder := performRequest(
 		t,
-		newTestMux(store),
+		deleteInstanceEndpoint(handler, other.ID),
 		http.MethodDelete,
 		instancesPath+"/"+other.ID,
 		nil,
@@ -726,7 +774,7 @@ func TestGetOtherUsersConnectionReturnsNotFound(
 	t *testing.T,
 ) {
 	store := newTestStore()
-
+	handler := NewHandler(store)
 	other := createTestInstanceForOwner(
 		t,
 		store,
@@ -745,7 +793,7 @@ func TestGetOtherUsersConnectionReturnsNotFound(
 
 	recorder := performRequest(
 		t,
-		newTestMux(store),
+		getConnectionEndpoint(handler, other.ID),
 		http.MethodGet,
 		instancesPath+
 			"/"+other.ID+
@@ -767,7 +815,7 @@ func TestAdminCanGetAnyInstance(
 	t *testing.T,
 ) {
 	store := newTestStore()
-
+	handler := NewHandler(store)
 	other := createTestInstanceForOwner(
 		t,
 		store,
@@ -778,7 +826,7 @@ func TestAdminCanGetAnyInstance(
 
 	recorder := performRequestAs(
 		t,
-		newTestMux(store),
+		getInstanceEndpoint(handler, other.ID),
 		http.MethodGet,
 		instancesPath+"/"+other.ID,
 		nil,

@@ -18,9 +18,9 @@ import (
 )
 
 const (
-	managedByLabelKey   = "app.kubernetes.io/managed-by"
-	managedByLabelValue = "paas-api"
-	ownerIDLabelKey = "paas-api/owner-id"
+	managedByLabelKey     = "app.kubernetes.io/managed-by"
+	managedByLabelValue   = "paas-api"
+	ownerIDLabelKey       = "paas-api/owner-id"
 	displayNameAnnotation = "paas-api/name"
 )
 

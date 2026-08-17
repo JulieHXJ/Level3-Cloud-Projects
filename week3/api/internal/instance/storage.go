@@ -28,4 +28,3 @@ type InstanceStore interface {
 type ConnectionStore interface {
 	GetConnection(ctx context.Context, id string) (ConnectionInfo, error)
 }
-

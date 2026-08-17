@@ -1,7 +1,7 @@
 package main
 
 import (
-	"encoding/json"
+	"context"
 	"errors"
 	"fmt"
 	"net/http"
@@ -9,10 +9,11 @@ import (
 	"strings"
 	"time"
 
+	"cloud3-api/internal/httpresponse"
+	"cloud3-api/internal/instance"
 	"cloud3-api/internal/user"
 
 	"github.com/golang-jwt/jwt/v5"
-	"github.com/labstack/echo/v4"
 	"golang.org/x/crypto/bcrypt"
 )
 
@@ -22,17 +23,11 @@ const (
 	bcryptCost = 12
 )
 
-type loginRequest struct {
-	Username string `json:"username"`
-	Password string `json:"password"`
-}
+var errInvalidCredentials = errors.New("invalid credentials")
 
-type loginResponse struct {
-	Token     string `json:"token"`
-	TokenType string `json:"tokenType"`
-	ExpiresIn int    `json:"expiresIn"`
-	Role      string `json:"role"`
-}
+type claimsContextKeyType struct{}
+
+var claimsContextKey claimsContextKeyType
 
 // raised by server, stores info about token identity
 type Claims struct {
@@ -76,72 +71,41 @@ func newAuthService(userStore user.UserStore) (*authService, error) {
 	}, nil
 }
 
-// func loginHandler(w http.ResponseWriter, r *http.Request) {
-// 	w.Header().Set("Content-Type", "application/json")
-// 	w.WriteHeader(http.StatusNotImplemented)
-
-// 	if err := json.NewEncoder(w).Encode(map[string]string{
-// 		"error": "login not implemented yet",
-// 	}); err != nil {
-// 		log.Printf("failed to encode login response: %v", err)
-// 	}
-// }
-
-func (a *authService) login(ctx echo.Context) error {
-	var request loginRequest
-
-	decoder := json.NewDecoder(ctx.Request().Body)
-	decoder.DisallowUnknownFields()
-	if err := decoder.Decode(&request); err != nil {
-		return ctx.JSON(
-			http.StatusBadRequest,
-			map[string]string{
-				"error": "invalid request body",
-			},
-		)
-	}
-
-	request.Username = strings.TrimSpace(request.Username)
-
-	dbUser, err := a.users.GetByUsername(
-		ctx.Request().Context(),
-		request.Username,
-	)
+func (a *authService) authenticate(ctx context.Context, username string, password string) (user.User, error) {
+	username = strings.TrimSpace(username)
+	dbUser, err := a.users.GetByUsername(ctx, username)
 
 	userExists := true
 	passwordHash := a.dummyPassHash
 
-	// keep comparing password, to provent attacker guessing by charactor(r.pass == user.pass)
 	if err != nil {
 		if errors.Is(err, user.ErrUserNotFound) {
 			userExists = false
 		} else {
-			return ctx.JSON(
-				http.StatusInternalServerError,
-				map[string]string{
-					"error": "failed to query user",
-				},
+			return user.User{}, fmt.Errorf(
+				"query user: %w",
+				err,
 			)
 		}
 	} else {
 		passwordHash = []byte(dbUser.PasswordHash)
 	}
 
+	// compare a bcrypt hash, even when the user does not exist.
 	passwordMatches := bcrypt.CompareHashAndPassword(
 		passwordHash,
-		[]byte(request.Password),
+		[]byte(password),
 	) == nil
 
-	// user not exist / wrong password (don't return seperately! risky!)
+	// same response when the username or password is incorrect.
 	if !userExists || !passwordMatches {
-		return ctx.JSON(
-			http.StatusUnauthorized,
-			map[string]string{
-				"error": "invalid username or password",
-			},
-		)
+		return user.User{}, errInvalidCredentials
 	}
 
+	return *dbUser, nil
+}
+
+func (a *authService) issueToken(dbUser user.User) (string, error) {
 	now := time.Now().UTC()
 
 	claims := Claims{
@@ -155,7 +119,6 @@ func (a *authService) login(ctx echo.Context) error {
 		},
 	}
 
-	// builde Token
 	token := jwt.NewWithClaims(
 		jwt.SigningMethodHS256,
 		claims,
@@ -163,21 +126,168 @@ func (a *authService) login(ctx echo.Context) error {
 
 	signedToken, err := token.SignedString(a.secret)
 	if err != nil {
-		return ctx.JSON(
-			http.StatusInternalServerError,
-			map[string]string{
-				"error": "failed to issue token",
-			},
+		return "", fmt.Errorf(
+			"sign JWT: %w",
+			err,
 		)
 	}
 
-	return ctx.JSON(
-		http.StatusOK,
-		loginResponse{
-			Token:     signedToken,
-			TokenType: "Bearer",
-			ExpiresIn: int(tokenTTL.Seconds()),
-			Role:      string(dbUser.Role),
-		},
+	return signedToken, nil
+}
+
+// jwtMiddleware authenticates protected requests.
+func (a *authService) jwtMiddleware(next http.Handler) http.Handler {
+
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+
+		// Browser CORS preflight do not require a JWT.
+		if r.Method == http.MethodOptions {
+			next.ServeHTTP(w, r)
+			return
+		}
+
+		// Public endpoints.
+		if r.Method == http.MethodGet &&
+			r.URL.Path == "/api/v1/health" {
+			next.ServeHTTP(w, r)
+			return
+		}
+
+		if r.Method == http.MethodPost &&
+			(r.URL.Path == "/api/v1/auth/login" ||
+				r.URL.Path == "/api/v1/auth/register") {
+			next.ServeHTTP(w, r)
+			return
+		}
+
+		//  check
+		tokenString, ok := readBearerToken(
+			r.Header.Get("Authorization"),
+		)
+		if !ok {
+			unauthorized(w)
+			return
+		}
+
+		claims := &Claims{}
+		token, err := jwt.ParseWithClaims(
+			tokenString,
+			claims,
+			func(token *jwt.Token) (any, error) {
+				if token.Method.Alg() !=
+					jwt.SigningMethodHS256.Alg() {
+					return nil, fmt.Errorf(
+						"unexpected signing method: %s",
+						token.Method.Alg(),
+					)
+				}
+
+				return a.secret, nil
+			},
+			jwt.WithValidMethods([]string{
+				jwt.SigningMethodHS256.Alg(),
+			}),
+			jwt.WithIssuer(jwtIssuer),
+			jwt.WithExpirationRequired(),
+			jwt.WithIssuedAt(),
+		)
+
+		if err != nil || !token.Valid {
+			unauthorized(w)
+			return
+		}
+
+		// These fields are required by my application,
+		// Only supported platform roles are accepted.
+		if claims.Subject == "" {
+			unauthorized(w)
+			return
+		}
+
+		if claims.Role != "admin" &&
+			claims.Role != "user" {
+			unauthorized(w)
+			return
+		}
+
+		// pass claim to later handlers.
+		requestContext := context.WithValue(
+			r.Context(),
+			claimsContextKey,
+			claims,
+		)
+
+		// convert to instance principal for instace handler
+		requestContext = instance.WithPrincipal(
+			requestContext,
+			instance.Principal{
+				UserID: claims.Subject,
+				Role:   claims.Role,
+			},
+		)
+
+		next.ServeHTTP(
+			w,
+			r.WithContext(requestContext),
+		)
+	})
+}
+
+// ----------helper-----------------
+func readBearerToken(header string) (string, bool) {
+	parts := strings.Fields(header)
+
+	if len(parts) != 2 {
+		return "", false
+	}
+
+	if !strings.EqualFold(parts[0], "Bearer") {
+		return "", false
+	}
+
+	if parts[1] == "" {
+		return "", false
+	}
+
+	return parts[1], true
+}
+
+func claimsFromContext(ctx context.Context) (*Claims, bool) {
+	claims, ok := ctx.Value(claimsContextKey).(*Claims)
+	if !ok || claims == nil {
+		return nil, false
+	}
+
+	return claims, true
+}
+
+// read middleware claim and check role is allowed
+func requireRoles(w http.ResponseWriter, r *http.Request, allowedRoles ...string) bool {
+	claims, ok := claimsFromContext(r.Context())
+	if !ok {
+		unauthorized(w)
+		return false
+	}
+
+	for _, allowedRole := range allowedRoles {
+		if claims.Role == allowedRole {
+			return true
+		}
+	}
+
+	httpresponse.PrintError(
+		w,
+		http.StatusForbidden,
+		"forbidden",
+	)
+
+	return false
+}
+
+func unauthorized(w http.ResponseWriter) {
+	httpresponse.PrintError(
+		w,
+		http.StatusUnauthorized,
+		"invalid or missing bearer token",
 	)
 }

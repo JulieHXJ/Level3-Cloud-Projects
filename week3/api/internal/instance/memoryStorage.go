@@ -118,7 +118,7 @@ func (s *MemoryStorage) Create(ctx context.Context, r CreateInstanceRequest, own
 	instance := DBInstance{
 		ID:        id,
 		Name:      name,
-		OwnerID: 	ownerID,
+		OwnerID:   ownerID,
 		Instances: r.Instances,
 		Storage:   storage,
 		CPU:       cpu,
