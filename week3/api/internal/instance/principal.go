@@ -9,10 +9,7 @@ type Principal struct {
 
 type principalContextKey struct{}
 
-func WithPrincipal(
-	ctx context.Context,
-	principal Principal,
-) context.Context {
+func WithPrincipal(ctx context.Context, principal Principal) context.Context {
 	return context.WithValue(
 		ctx,
 		principalContextKey{},
@@ -20,9 +17,7 @@ func WithPrincipal(
 	)
 }
 
-func PrincipalFromContext(
-	ctx context.Context,
-) (Principal, bool) {
+func PrincipalFromContext(ctx context.Context) (Principal, bool) {
 	principal, ok := ctx.Value(
 		principalContextKey{},
 	).(Principal)

@@ -50,9 +50,8 @@ func (h *Handler) ListInstances(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Normal users only see their own instances.
+	// check normal user id matched with instance ownerID to list 
 	ownedInstances := make([]DBInstance, 0)
-
 	for _, instance := range instanceList {
 		if instance.OwnerID == principal.UserID {
 			ownedInstances = append(
@@ -238,71 +237,6 @@ func (h *Handler) GetInstanceConnection(w http.ResponseWriter, r *http.Request, 
 	httpresponse.WriteJSON(w, http.StatusOK, connection)
 }
 
-// // GET & POST wrapper
-// func (h *Handler) instancesHandler(w http.ResponseWriter, r *http.Request) {
-// 	switch r.Method {
-// 	case http.MethodGet:
-// 		h.getInstances(w, r)
-// 	case http.MethodPost:
-// 		h.createInstances(w, r)
-// 	default:
-// 		printError(w, http.StatusMethodNotAllowed, "method not allowed")
-// 	}
-// }
-
-// func (h *Handler) instancesIDHandler(w http.ResponseWriter, r *http.Request) {
-// 	//get id (and connction) from url
-// 	path := strings.TrimPrefix(r.URL.Path, instancesPath+"/")
-// 	path = strings.Trim(path, "/")
-// 	if path == "" {
-// 		printError(w, http.StatusBadRequest, "missing instance id")
-// 		return
-// 	}
-
-// 	arr := strings.Split(path, "/")
-// 	id := arr[0]
-// 	if id == "" {
-// 		printError(w, http.StatusBadRequest, "missing instance id")
-// 		return
-// 	}
-
-// 	// GET /instances/{id}/connection
-// 	if len(arr) == 2 && arr[1] == "connection" {
-// 		if r.Method != http.MethodGet {
-// 			w.Header().Set("Allow", http.MethodGet)
-// 			printError(w, http.StatusMethodNotAllowed, "method not allowed")
-// 			return
-// 		}
-// 		h.getConnection(w, r, id)
-// 		return
-// 	}
-
-// 	// 拒绝 /instances/{id}/unknown 等无效路径。
-// 	if len(arr) != 1 {
-// 		printError(
-// 			w,
-// 			http.StatusNotFound,
-// 			"endpoint not found",
-// 		)
-// 		return
-// 	}
-
-// 	//router
-// 	switch r.Method {
-// 	case http.MethodGet:
-// 		h.getInstanceByID(w, r, id)
-
-// 	case http.MethodPatch:
-// 		h.patchInstance(w, r, id)
-
-// 	case http.MethodDelete:
-// 		h.deleteInstance(w, r, id)
-
-// 	default:
-// 		w.Header().Set("Allow", "GET, PATCH, DELETE")
-// 		printError(w, http.StatusMethodNotAllowed, "method not allowed")
-// 	}
-// }
 
 func requirePrincipal(
 	w http.ResponseWriter,
