@@ -29,7 +29,7 @@ resource "stackit_ske_cluster" "week2" {
       name                    = var.node_pool_name
       machine_type            = var.machine_type
       minimum                 = 3
-      maximum                 = 3 # non scalerabel
+      maximum                 = 5 
       availability_zones      = [var.availability_zone]
       allow_system_components = true
 

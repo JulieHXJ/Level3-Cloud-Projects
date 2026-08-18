@@ -18,7 +18,7 @@ spec:
   affinity:
     enablePodAntiAffinity: true
     topologyKey: kubernetes.io/hostname
-    podAntiAffinityType: required
+    podAntiAffinityType: preferred
 
   storage:
     size: 5Gi
