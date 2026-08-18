@@ -12,6 +12,7 @@ import (
 	"cloud3-api/internal/httpresponse"
 	"cloud3-api/internal/instance"
 	"cloud3-api/internal/user"
+	"cloud3-api/internal/auth"
 
 	"github.com/google/uuid"
 	"golang.org/x/crypto/bcrypt"
@@ -20,7 +21,7 @@ import (
 // APIServer implements api.ServerInterface.
 // APIServer = instanceHandler + Health + Login + Register
 type APIServer struct {
-	auth      *authService
+	auth      *auth.AuthService
 	instances *instance.Handler
 	userStore user.UserStore
 }
@@ -53,13 +54,13 @@ func (s *APIServer) Login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	dbUser, err := s.auth.authenticate(
+	dbUser, err := s.auth.Authenticate(
 		r.Context(),
 		req.Username,
 		req.Password,
 	)
 	if err != nil {
-		if errors.Is(err, errInvalidCredentials) {
+		if errors.Is(err, auth.ErrInvalidCredentials) {
 			httpresponse.PrintError(
 				w,
 				http.StatusUnauthorized,
@@ -78,7 +79,7 @@ func (s *APIServer) Login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	signedToken, err := s.auth.issueToken(dbUser)
+	signedToken, err := s.auth.IssueToken(dbUser)
 	if err != nil {
 		log.Printf("failed to issue token: %v", err)
 
@@ -96,7 +97,7 @@ func (s *APIServer) Login(w http.ResponseWriter, r *http.Request) {
 		api.LoginResponse{
 			AccessToken: signedToken,
 			TokenType:   "Bearer",
-			ExpiresIn:   int(tokenTTL.Seconds()),
+			ExpiresIn:   int(auth.TokenTTL.Seconds()),
 			Role:        api.UserRole(dbUser.Role),
 		},
 	)

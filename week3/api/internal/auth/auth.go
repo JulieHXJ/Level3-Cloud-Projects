@@ -1,4 +1,4 @@
-package main
+package auth
 
 import (
 	"context"
@@ -19,11 +19,11 @@ import (
 
 const (
 	jwtIssuer  = "Cloud3-api"
-	tokenTTL   = time.Hour
+	TokenTTL   = time.Hour
 	bcryptCost = 12
 )
 
-var errInvalidCredentials = errors.New("invalid credentials")
+var ErrInvalidCredentials = errors.New("invalid credentials")
 
 type claimsContextKeyType struct{}
 
@@ -37,7 +37,7 @@ type Claims struct {
 }
 
 // link the authentication data to user group
-type authService struct {
+type AuthService struct {
 	secret        []byte
 	users         user.UserStore
 	dummyPassHash []byte //preserve time for non-existing user
@@ -45,7 +45,7 @@ type authService struct {
 
 // get jwt secrect and create authService
 // currently read from env
-func newAuthService(userStore user.UserStore) (*authService, error) {
+func NewAuthService(userStore user.UserStore) (*AuthService, error) {
 	secret := os.Getenv("JWT_SECRET")
 	if len(secret) < 32 {
 		return nil, fmt.Errorf(
@@ -64,14 +64,14 @@ func newAuthService(userStore user.UserStore) (*authService, error) {
 		)
 	}
 
-	return &authService{
+	return &AuthService{
 		secret:        []byte(secret),
 		users:         userStore,
 		dummyPassHash: dummyPasswordHash,
 	}, nil
 }
 
-func (a *authService) authenticate(ctx context.Context, username string, password string) (user.User, error) {
+func (a *AuthService) Authenticate(ctx context.Context, username string, password string) (user.User, error) {
 	username = strings.TrimSpace(username)
 	dbUser, err := a.users.GetByUsername(ctx, username)
 
@@ -99,13 +99,13 @@ func (a *authService) authenticate(ctx context.Context, username string, passwor
 
 	// same response when the username or password is incorrect.
 	if !userExists || !passwordMatches {
-		return user.User{}, errInvalidCredentials
+		return user.User{}, ErrInvalidCredentials
 	}
 
 	return *dbUser, nil
 }
 
-func (a *authService) issueToken(dbUser user.User) (string, error) {
+func (a *AuthService) IssueToken(dbUser user.User) (string, error) {
 	now := time.Now().UTC()
 
 	claims := Claims{
@@ -115,7 +115,7 @@ func (a *authService) issueToken(dbUser user.User) (string, error) {
 			Subject:   dbUser.ID,
 			IssuedAt:  jwt.NewNumericDate(now),
 			NotBefore: jwt.NewNumericDate(now),
-			ExpiresAt: jwt.NewNumericDate(now.Add(tokenTTL)),
+			ExpiresAt: jwt.NewNumericDate(now.Add(TokenTTL)),
 		},
 	}
 
@@ -136,15 +136,16 @@ func (a *authService) issueToken(dbUser user.User) (string, error) {
 }
 
 // jwtMiddleware authenticates protected requests.
-func (a *authService) jwtMiddleware(next http.Handler) http.Handler {
+func (a *AuthService) JwtMiddleware(next http.Handler) http.Handler {
 
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 
 		// Browser CORS preflight do not require a JWT.
-		if r.Method == http.MethodOptions {
-			next.ServeHTTP(w, r)
-			return
-		}
+		// if r.Method == http.MethodOptions {
+		// 	next.ServeHTTP(w, r)
+		// 	return
+		// }
+
 
 		// Public endpoints.
 		if r.Method == http.MethodGet &&

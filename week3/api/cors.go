@@ -30,8 +30,7 @@ func corsMiddleware(next http.Handler) http.Handler {
 			w.Header().Add("Vary", "Origin")
 		}
 
-		// 浏览器在 PATCH、DELETE 或携带 Authorization
-		// 之前，可能先发送 OPTIONS 预检请求。
+		// OPTIONS 预检请求。
 		if r.Method == http.MethodOptions {
 			if origin != "" && !allowedOrigins[origin] {
 				http.Error(

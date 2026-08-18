@@ -8,8 +8,13 @@ import (
 	"time"
 
 	api "cloud3-api/internal/api"
+	"cloud3-api/internal/auth"
 	"cloud3-api/internal/instance"
 	"cloud3-api/internal/user"
+
+	cloudmetrics "cloud3-api/internal/metrics"
+
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
 
 const (
@@ -49,26 +54,31 @@ func main() {
 	}
 
 	// authService
-	auth, err := newAuthService(userStore)
+	authService, err := auth.NewAuthService(userStore)
 	if err != nil {
 		log.Fatal("failed to configure authentication: ", err)
 	}
 
 	apiServer := &APIServer{
-		auth:      auth,
+		auth:      authService,
 		userStore: userStore,
 		instances: instance.NewHandler(store),
 	}
 
 	// endpoint handler
-	routerHandler := api.Handler(apiServer)
+	router := api.Handler(apiServer)
 
 	// CORS & JWT authentication
-	corsHandler := corsMiddleware(auth.jwtMiddleware(routerHandler))
+	// corsHandler := corsMiddleware(auth.jwtMiddleware(routerHandler))
+	apiHandler := cloudmetrics.Middleware(corsMiddleware(authService.JwtMiddleware(router)))
+
+	rootMux := http.NewServeMux()
+	rootMux.Handle("/metrics", promhttp.Handler()) // for GET /metrics
+	rootMux.Handle("/", apiHandler)                // ui & api
 
 	server := &http.Server{
 		Addr:              ":8080",
-		Handler:           corsHandler,
+		Handler:           rootMux,
 		ReadHeaderTimeout: 5 * time.Second,
 	}
 
