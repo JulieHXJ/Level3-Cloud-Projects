@@ -4,20 +4,38 @@
 **/*.tfstate.*
 **/*.tfplan
 **/crash.log
-**/terraform.tfvars
+**/*.tfvars
+**/*.auto.tfvars
 
 # Kubernetes credentials
 **/kubeconfig
 **/kubeconfig.yaml
 **/kubeconfig-*
-**/.env
+**/*.kubeconfig
 
 # Credentials and private keys
 **/*service-account-key*.json
 **/*.pem
 **/*.key
+**/*.p12
+**/*.pfx
 
 .DS_Store
 
-# Go build artifacts
+# Go build and test artifacts
 week3/api/bin/
+**/coverage.out
+**/*.test
+
+# Keep safe templates
+!**/*.tfvars.example
+
+# Environment files
+**/.env
+**/.env.*
+!**/.env.example
+!**/.env.template
+
+# UI local/build artifacts
+week3/ui/node_modules/
+week3/ui/dist/

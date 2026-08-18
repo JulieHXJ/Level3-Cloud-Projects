@@ -18,8 +18,10 @@ export default defineConfig({
   server: {
     proxy: {
       '/api': {
-        target: 'http://188.34.95.76',
+        // target: 'https://julie-paas.runs.onstackit.cloud',
+        target: 'http://localhost:8080',
         changeOrigin: true,
+        // secure: true,
       },
     },
   },

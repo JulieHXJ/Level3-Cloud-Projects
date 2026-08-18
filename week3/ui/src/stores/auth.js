@@ -77,7 +77,7 @@ export const useAuthStore = defineStore('auth', () => {
       throw new Error(body.message || body.error || `Login failed: ${response.status}`)
     }
 
-    if (!body.token) {
+    if (!body.accessToken) {
       throw new Error('Login response does not contain a token')
     }
 
@@ -85,7 +85,7 @@ export const useAuthStore = defineStore('auth', () => {
       throw new Error('Login response contains an unsupported role')
     }
 
-    token.value = body.token
+    token.value = body.accessToken
     tokenType.value = body.tokenType || 'Bearer'
     role.value = body.role
     username.value = loginUsername.trim()
