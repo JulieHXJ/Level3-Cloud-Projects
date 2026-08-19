@@ -84,12 +84,12 @@ func main() {
 
 
 	//rate limiter
-	limiter := cloudmetrics.NewRateLimiter(5, time.Minute)
+	limiter := cloudmetrics.NewRateLimiter(60, time.Minute)
 
 
 	apiHandler := cloudmetrics.Middleware(
-		limiter.Middleware(
-			corsMiddleware(
+		corsMiddleware(
+			limiter.Middleware(
 				authService.JwtMiddleware(router),
 			),
 		),

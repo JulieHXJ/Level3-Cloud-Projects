@@ -30,6 +30,17 @@ func NewRateLimiter(limit int, window time.Duration) *RateLimiter {
 
 func (l *RateLimiter) Middleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+
+		// skip Kubernetes health probes
+		if r.URL.Path == "/api/v1/health" || r.Method == http.MethodOptions {
+			next.ServeHTTP(w, r)
+			return
+		}
+
+
+
+
+
 		clientID := clientIP(r)
 
 		now := time.Now()
