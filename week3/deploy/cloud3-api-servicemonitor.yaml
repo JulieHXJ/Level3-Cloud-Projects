@@ -1,0 +1,24 @@
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+
+metadata:
+  name: cloud3-api
+  namespace: monitoring
+
+spec:
+  namespaceSelector:
+    matchNames:
+      - postgres-demo
+
+  selector:
+    matchLabels:
+      app: cloud3-api
+
+  # GET /metrics every 15s
+  endpoints:
+    - port: http
+      path: /metrics
+      interval: 15s
+
+
+# define the service target 

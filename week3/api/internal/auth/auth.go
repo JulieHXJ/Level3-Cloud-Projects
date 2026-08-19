@@ -146,7 +146,6 @@ func (a *AuthService) JwtMiddleware(next http.Handler) http.Handler {
 		// 	return
 		// }
 
-
 		// Public endpoints.
 		if r.Method == http.MethodGet &&
 			r.URL.Path == "/api/v1/health" {

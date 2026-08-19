@@ -143,6 +143,8 @@ kind: Service
 metadata:
   name: cloud3-api
   namespace: postgres-demo
+  labels:
+    app: cloud3-api
 spec:
   type: ClusterIP
 
