@@ -1,6 +1,7 @@
 package instance
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"log"
@@ -8,6 +9,7 @@ import (
 	"strings"
 
 	"cloud3-api/internal/httpresponse"
+	cloudmetrics "cloud3-api/internal/metrics"
 )
 
 type Handler struct {
@@ -50,7 +52,7 @@ func (h *Handler) ListInstances(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// check normal user id matched with instance ownerID to list 
+	// check normal user id matched with instance ownerID to list
 	ownedInstances := make([]DBInstance, 0)
 	for _, instance := range instanceList {
 		if instance.OwnerID == principal.UserID {
@@ -104,8 +106,23 @@ func (h *Handler) CreateInstance(w http.ResponseWriter, r *http.Request) {
 	instance, err := h.store.Create(r.Context(), request, principal.UserID)
 	if err != nil {
 		log.Println("failed to create instance:", err)
+
+		// count failure in operations cout
+		cloudmetrics.InstanceOperationsTotal.WithLabelValues("create", "failure").Inc()
+
 		httpresponse.PrintError(w, http.StatusInternalServerError, "failed to create instance")
 		return
+	}
+
+	// count success into operations total
+	cloudmetrics.InstanceOperationsTotal.WithLabelValues("create", "success").Inc()
+
+	// instacne total +1
+	if err := h.SyncInstanceCount(r.Context()); err != nil {
+		log.Printf(
+			"failed to refresh instance count metric: %v",
+			err,
+		)
 	}
 
 	httpresponse.WriteJSON(w, http.StatusCreated, instance)
@@ -141,6 +158,7 @@ func (h *Handler) DeleteInstance(w http.ResponseWriter, r *http.Request, id stri
 		}
 
 		log.Println("failed to delete instance:", err)
+		cloudmetrics.InstanceOperationsTotal.WithLabelValues("delete", "failure").Inc()
 
 		httpresponse.PrintError(
 			w,
@@ -148,6 +166,16 @@ func (h *Handler) DeleteInstance(w http.ResponseWriter, r *http.Request, id stri
 			"failed to delete instance",
 		)
 		return
+	}
+
+	cloudmetrics.InstanceOperationsTotal.WithLabelValues("create", "success").Inc()
+
+	// instance total -1
+	if err := h.SyncInstanceCount(r.Context()); err != nil {
+		log.Printf(
+			"failed to refresh instance count metric: %v",
+			err,
+		)
 	}
 
 	w.WriteHeader(http.StatusAccepted)
@@ -191,6 +219,7 @@ func (h *Handler) PatchInstance(w http.ResponseWriter, r *http.Request, id strin
 			httpresponse.PrintError(w, http.StatusBadRequest, err.Error())
 		default:
 			log.Println("failed to patch instance:", err)
+			cloudmetrics.InstanceOperationsTotal.WithLabelValues("update", "failure").Inc()
 			httpresponse.PrintError(
 				w,
 				http.StatusInternalServerError,
@@ -200,6 +229,7 @@ func (h *Handler) PatchInstance(w http.ResponseWriter, r *http.Request, id strin
 		return
 	}
 
+	cloudmetrics.InstanceOperationsTotal.WithLabelValues("update", "success").Inc()
 	httpresponse.WriteJSON(w, http.StatusOK, instance)
 
 }
@@ -236,7 +266,6 @@ func (h *Handler) GetInstanceConnection(w http.ResponseWriter, r *http.Request, 
 
 	httpresponse.WriteJSON(w, http.StatusOK, connection)
 }
-
 
 func requirePrincipal(
 	w http.ResponseWriter,
@@ -309,4 +338,15 @@ func (h *Handler) getAuthorizedInstance(
 	}
 
 	return instance, true
+}
+
+// helper for InstacneCurrent metrics
+func (h *Handler) SyncInstanceCount(ctx context.Context) error {
+	instanceList, err := h.store.List(ctx)
+	if err != nil {
+		return err
+	}
+
+	cloudmetrics.InstancesCurrent.Set(float64(len(instanceList)))
+	return nil
 }

@@ -59,10 +59,21 @@ func main() {
 		log.Fatal("failed to configure authentication: ", err)
 	}
 
+
+	//wrapper for Instance count
+	instanceHandler := instance.NewHandler(store)
+
+	if err := instanceHandler.SyncInstanceCount(ctx); err != nil {
+		log.Printf(
+			"failed to initialize instance count metric: %v",
+			err,
+		)
+	}
+
 	apiServer := &APIServer{
 		auth:      authService,
 		userStore: userStore,
-		instances: instance.NewHandler(store),
+		instances: instanceHandler,
 	}
 
 	// endpoint handler
@@ -70,7 +81,19 @@ func main() {
 
 	// CORS & JWT authentication
 	// corsHandler := corsMiddleware(auth.jwtMiddleware(routerHandler))
-	apiHandler := cloudmetrics.Middleware(corsMiddleware(authService.JwtMiddleware(router)))
+
+
+	//rate limiter
+	limiter := cloudmetrics.NewRateLimiter(5, time.Minute)
+
+
+	apiHandler := cloudmetrics.Middleware(
+		limiter.Middleware(
+			corsMiddleware(
+				authService.JwtMiddleware(router),
+			),
+		),
+	)
 
 	rootMux := http.NewServeMux()
 	rootMux.Handle("/metrics", promhttp.Handler()) // for GET /metrics
