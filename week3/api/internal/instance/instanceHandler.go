@@ -9,7 +9,7 @@ import (
 	"strings"
 
 	"cloud3-api/internal/httpresponse"
-	cloudmetrics "cloud3-api/internal/metrics"
+	cloudmetrics "cloud3-api/internal/monitor"
 )
 
 type Handler struct {

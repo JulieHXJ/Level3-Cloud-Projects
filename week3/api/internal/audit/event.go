@@ -7,9 +7,9 @@ type Event struct {
 	ActorID       string
 	ActorRole     string
 	Action        string
-	ResourceType string
-	ResourceID   string
+	ResourceType  string
+	ResourceID    string
 	Result        string
-	RequestID    string
+	RequestID     string
 	FailureReason string
 }

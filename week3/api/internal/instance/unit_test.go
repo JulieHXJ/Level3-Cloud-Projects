@@ -874,52 +874,51 @@ func createTestInstanceForOwner(
 	return instance
 }
 
-
 // ownership test
 func TestCreateInstanceAssignsAuthenticatedUserAsOwner(
-    t *testing.T,
+	t *testing.T,
 ) {
-    store := newTestStore()
-    handler := NewHandler(store)
+	store := newTestStore()
+	handler := NewHandler(store)
 
-    alice := Principal{
-        UserID: testOwnerID,
-        Role:   "user",
-    }
+	alice := Principal{
+		UserID: testOwnerID,
+		Role:   "user",
+	}
 
-    recorder := performRequestAs(
-        t,
-        handler.CreateInstance,
-        http.MethodPost,
-        instancesPath,
-        []byte(`{"name":"alice-db","instances":1}`),
-        "application/json",
-        alice,
-    )
+	recorder := performRequestAs(
+		t,
+		handler.CreateInstance,
+		http.MethodPost,
+		instancesPath,
+		[]byte(`{"name":"alice-db","instances":1}`),
+		"application/json",
+		alice,
+	)
 
-    if recorder.Code != http.StatusCreated {
-        t.Fatalf(
-            "expected 201, got %d; body=%s",
-            recorder.Code,
-            recorder.Body.String(),
-        )
-    }
+	if recorder.Code != http.StatusCreated {
+		t.Fatalf(
+			"expected 201, got %d; body=%s",
+			recorder.Code,
+			recorder.Body.String(),
+		)
+	}
 
-    created := decodeResponse[DBInstance](t, recorder)
+	created := decodeResponse[DBInstance](t, recorder)
 
-    stored, err := store.Get(
-        context.Background(),
-        created.ID,
-    )
-    if err != nil {
-        t.Fatalf("failed to get created instance: %v", err)
-    }
+	stored, err := store.Get(
+		context.Background(),
+		created.ID,
+	)
+	if err != nil {
+		t.Fatalf("failed to get created instance: %v", err)
+	}
 
-    if stored.OwnerID != alice.UserID {
-        t.Fatalf(
-            "expected owner %q, got %q",
-            alice.UserID,
-            stored.OwnerID,
-        )
-    }
+	if stored.OwnerID != alice.UserID {
+		t.Fatalf(
+			"expected owner %q, got %q",
+			alice.UserID,
+			stored.OwnerID,
+		)
+	}
 }

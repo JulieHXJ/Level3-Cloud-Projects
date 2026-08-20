@@ -1,4 +1,4 @@
-package metrics
+package monitor
 
 import (
 	"net"
@@ -36,10 +36,6 @@ func (l *RateLimiter) Middleware(next http.Handler) http.Handler {
 			next.ServeHTTP(w, r)
 			return
 		}
-
-
-
-
 
 		clientID := clientIP(r)
 

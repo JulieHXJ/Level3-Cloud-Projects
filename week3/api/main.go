@@ -12,7 +12,7 @@ import (
 	"cloud3-api/internal/instance"
 	"cloud3-api/internal/user"
 
-	cloudmetrics "cloud3-api/internal/metrics"
+	cloudmonitor "cloud3-api/internal/monitor"
 
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
@@ -25,6 +25,7 @@ const (
 )
 
 func main() {
+	cloudmonitor.Init()
 
 	ctx := context.Background()
 
@@ -59,7 +60,6 @@ func main() {
 		log.Fatal("failed to configure authentication: ", err)
 	}
 
-
 	//wrapper for Instance count
 	instanceHandler := instance.NewHandler(store)
 
@@ -82,12 +82,10 @@ func main() {
 	// CORS & JWT authentication
 	// corsHandler := corsMiddleware(auth.jwtMiddleware(routerHandler))
 
-
 	//rate limiter
-	limiter := cloudmetrics.NewRateLimiter(60, time.Minute)
+	limiter := cloudmonitor.NewRateLimiter(60, time.Minute)
 
-
-	apiHandler := cloudmetrics.Middleware(
+	apiHandler := cloudmonitor.Middleware(
 		corsMiddleware(
 			limiter.Middleware(
 				authService.JwtMiddleware(router),

@@ -1,11 +1,14 @@
-package metrics
+package monitor
 
 import (
+	"context"
+	"log/slog"
 	"net/http"
 	"strconv"
 	"strings"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 )
@@ -57,19 +60,39 @@ var RateLimitExceededTotal = promauto.NewCounter(
 
 type statusRecorder struct {
 	http.ResponseWriter
-	statusCode int
+	statusCode  int
+	wroteHeader bool // flag to make sure one statuscode is written only once
 }
 
 func (w *statusRecorder) WriteHeader(status int) {
+
 	w.statusCode = status
+	w.wroteHeader = true
 	w.ResponseWriter.WriteHeader(status)
 }
 
+// added logging part into metrics middleware
 // record http request and response status, count +1
 func Middleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 
 		start := time.Now()
+
+		// log request_id and add to request context
+		requestID := strings.TrimSpace(r.Header.Get("X-Request-ID"))
+		if _, err := uuid.Parse(requestID); err != nil {
+			requestID = uuid.NewString() // generate one if no valid uuid
+		}
+
+		info := &RequestInfo{RequestID: requestID}
+
+		ctx := context.WithValue(
+			r.Context(),
+			requestInfoKey{},
+			info,
+		)
+		r = r.WithContext(ctx)
+		w.Header().Set("X-Request-ID", requestID) //Return request id to the caller in case user reports an error.
 
 		// wrapper for request method and the return code
 		recorder := &statusRecorder{
@@ -81,9 +104,10 @@ func Middleware(next http.Handler) http.Handler {
 		next.ServeHTTP(recorder, r)
 
 		route := routePaterrn(r)
-		duration := time.Since(start).Seconds()
+		duration := time.Since(start)
+		status := recorder.statusCode
 
-		// request total +1
+		// metrics
 		HTTPRequestsTotal.WithLabelValues(
 			r.Method,
 			route,
@@ -93,7 +117,36 @@ func Middleware(next http.Handler) http.Handler {
 		HTTPRequestsDuration.WithLabelValues(
 			r.Method,
 			route,
-		).Observe(duration)
+		).Observe(duration.Seconds())
+
+		// logging
+		logAttributes := []any{
+			"request_id", info.RequestID,
+
+			"method", r.Method,
+			"path", r.URL.Path,
+			"route", route,
+
+			"status", status,
+			"duration_ms", duration.Milliseconds(),
+
+			"actor_id", info.ActorID,
+			"actor_role", info.ActorRole,
+
+			"resource_id", info.ResourceID,
+			"error", info.Error,
+		}
+
+		switch {
+		case status >= http.StatusInternalServerError:
+			slog.Error("http_request", logAttributes...)
+
+		case status >= http.StatusBadRequest:
+			slog.Warn("http_request", logAttributes...)
+
+		default:
+			slog.Info("http_request", logAttributes...)
+		}
 	})
 }
 

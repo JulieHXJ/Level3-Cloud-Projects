@@ -9,10 +9,10 @@ import (
 	"time"
 
 	api "cloud3-api/internal/api"
+	"cloud3-api/internal/auth"
 	"cloud3-api/internal/httpresponse"
 	"cloud3-api/internal/instance"
 	"cloud3-api/internal/user"
-	"cloud3-api/internal/auth"
 
 	"github.com/google/uuid"
 	"golang.org/x/crypto/bcrypt"
