@@ -4,12 +4,11 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"log"
 	"net/http"
 	"strings"
 
 	"cloud3-api/internal/httpresponse"
-	cloudmetrics "cloud3-api/internal/monitor"
+	"cloud3-api/internal/monitor"
 )
 
 type Handler struct {
@@ -32,7 +31,13 @@ func (h *Handler) ListInstances(w http.ResponseWriter, r *http.Request) {
 
 	instanceList, err := h.store.List(r.Context())
 	if err != nil {
-		log.Println("failed to list instances:", err)
+		// log.Println("failed to list instances:", err)
+		monitor.SetError(r.Context(), "instance_list_failed")
+		monitor.Logger(r.Context()).Error(
+			"instance_operation_failed",
+			"operation", "list",
+			"cause", err,
+		)
 		httpresponse.PrintError(
 			w,
 			http.StatusInternalServerError,
@@ -82,7 +87,16 @@ func (h *Handler) CreateInstance(w http.ResponseWriter, r *http.Request) {
 	var request CreateInstanceRequest
 	err := json.NewDecoder(r.Body).Decode(&request)
 	if err != nil {
-		log.Println("failed to decode request body:", err)
+		// log.Println("failed to decode request body:", err)
+		monitor.SetError(
+			r.Context(),
+			"invalid_request_body",
+		)
+
+		monitor.Logger(r.Context()).Warn(
+			"request_validation_failed",
+			"reason", "invalid_request_body",
+		)
 		httpresponse.PrintError(w, http.StatusBadRequest, "invalid request body")
 		return
 	}
@@ -105,24 +119,31 @@ func (h *Handler) CreateInstance(w http.ResponseWriter, r *http.Request) {
 
 	instance, err := h.store.Create(r.Context(), request, principal.UserID)
 	if err != nil {
-		log.Println("failed to create instance:", err)
+		monitor.SetError(
+			r.Context(),
+			"instance_create_failed",
+		)
+
+		monitor.Logger(r.Context()).Error(
+			"instance_operation_failed",
+			"operation", "create",
+			"cause", err,
+		)
 
 		// count failure in operations cout
-		cloudmetrics.InstanceOperationsTotal.WithLabelValues("create", "failure").Inc()
+		monitor.InstanceOperationsTotal.WithLabelValues("create", "failure").Inc()
 
 		httpresponse.PrintError(w, http.StatusInternalServerError, "failed to create instance")
 		return
 	}
 
 	// count success into operations total
-	cloudmetrics.InstanceOperationsTotal.WithLabelValues("create", "success").Inc()
+	monitor.InstanceOperationsTotal.WithLabelValues("create", "success").Inc()
+	monitor.SetResourceID(r.Context(), instance.ID)
 
 	// instacne total +1
 	if err := h.SyncInstanceCount(r.Context()); err != nil {
-		log.Printf(
-			"failed to refresh instance count metric: %v",
-			err,
-		)
+		monitor.Logger(r.Context()).Warn("instance_count_metric_sync_failed")
 	}
 
 	httpresponse.WriteJSON(w, http.StatusCreated, instance)
@@ -149,6 +170,7 @@ func (h *Handler) DeleteInstance(w http.ResponseWriter, r *http.Request, id stri
 	err := h.store.Delete(r.Context(), id)
 	if err != nil {
 		if errors.Is(err, ErrInstanceNotFound) {
+			monitor.SetError(r.Context(), "instance_not_found")
 			httpresponse.PrintError(
 				w,
 				http.StatusNotFound,
@@ -157,8 +179,13 @@ func (h *Handler) DeleteInstance(w http.ResponseWriter, r *http.Request, id stri
 			return
 		}
 
-		log.Println("failed to delete instance:", err)
-		cloudmetrics.InstanceOperationsTotal.WithLabelValues("delete", "failure").Inc()
+		monitor.SetError(r.Context(), "instance_deleted_failed")
+		monitor.Logger(r.Context()).Error(
+			"instance_operation_failed",
+			"operation", "delete",
+			"cause", err,
+		)
+		monitor.InstanceOperationsTotal.WithLabelValues("delete", "failure").Inc()
 
 		httpresponse.PrintError(
 			w,
@@ -168,20 +195,17 @@ func (h *Handler) DeleteInstance(w http.ResponseWriter, r *http.Request, id stri
 		return
 	}
 
-	cloudmetrics.InstanceOperationsTotal.WithLabelValues("create", "success").Inc()
+	monitor.InstanceOperationsTotal.WithLabelValues("delete", "success").Inc()
 
 	// instance total -1
 	if err := h.SyncInstanceCount(r.Context()); err != nil {
-		log.Printf(
-			"failed to refresh instance count metric: %v",
-			err,
-		)
+		monitor.Logger(r.Context()).Warn("instance_count_metric_sync_failed")
 	}
 
 	w.WriteHeader(http.StatusAccepted)
 }
 
-// PUT /instances/{id}
+// PATCH /instances/{id}
 func (h *Handler) PatchInstance(w http.ResponseWriter, r *http.Request, id string) {
 	_, ok := h.getAuthorizedInstance(w, r, id)
 	if !ok {
@@ -197,7 +221,12 @@ func (h *Handler) PatchInstance(w http.ResponseWriter, r *http.Request, id strin
 
 	err := json.NewDecoder(r.Body).Decode(&request)
 	if err != nil {
-		log.Println("failed to decode update request:", err)
+		monitor.SetError(r.Context(), "invalid_request_body")
+
+		monitor.Logger(r.Context()).Warn(
+			"request_validation_failed",
+			"reason", "invalid_request_body",
+		)
 		httpresponse.PrintError(w, http.StatusBadRequest, "invalid request body")
 		return
 	}
@@ -214,12 +243,19 @@ func (h *Handler) PatchInstance(w http.ResponseWriter, r *http.Request, id strin
 	if err != nil {
 		switch {
 		case errors.Is(err, ErrInstanceNotFound):
+			monitor.SetError(r.Context(), "instance_not_found")
 			httpresponse.PrintError(w, http.StatusNotFound, "instance not found")
 		case errors.Is(err, ErrInvalidInstance):
+			monitor.SetError(r.Context(), "invalid_instance")
 			httpresponse.PrintError(w, http.StatusBadRequest, err.Error())
 		default:
-			log.Println("failed to patch instance:", err)
-			cloudmetrics.InstanceOperationsTotal.WithLabelValues("update", "failure").Inc()
+			monitor.SetError(r.Context(), "instance_patch_failed")
+			monitor.Logger(r.Context()).Error(
+				"instance_operation_failed",
+				"operation", "patch",
+				"cause", err,
+			)
+			monitor.InstanceOperationsTotal.WithLabelValues("update", "failure").Inc()
 			httpresponse.PrintError(
 				w,
 				http.StatusInternalServerError,
@@ -229,7 +265,7 @@ func (h *Handler) PatchInstance(w http.ResponseWriter, r *http.Request, id strin
 		return
 	}
 
-	cloudmetrics.InstanceOperationsTotal.WithLabelValues("update", "success").Inc()
+	monitor.InstanceOperationsTotal.WithLabelValues("update", "success").Inc()
 	httpresponse.WriteJSON(w, http.StatusOK, instance)
 
 }
@@ -243,6 +279,7 @@ func (h *Handler) GetInstanceConnection(w http.ResponseWriter, r *http.Request, 
 
 	connectionStore, ok := h.store.(ConnectionStore)
 	if !ok {
+		monitor.SetError(r.Context(), "connection_not_supported")
 		httpresponse.PrintError(w, http.StatusNotImplemented, "connection endpoint is not supported")
 		return
 	}
@@ -250,16 +287,22 @@ func (h *Handler) GetInstanceConnection(w http.ResponseWriter, r *http.Request, 
 	connection, err := connectionStore.GetConnection(r.Context(), id)
 	if err != nil {
 		if errors.Is(err, ErrInstanceNotFound) {
+			monitor.SetError(r.Context(), "instance_not_found")
 			httpresponse.PrintError(w, http.StatusNotFound, "instance not found")
 			return
 		}
 
 		if errors.Is(err, ErrConnectionNotReady) {
+			monitor.SetError(r.Context(), "connection_not_ready")
 			httpresponse.PrintError(w, http.StatusConflict, "connection information is not ready")
 			return
 		}
 
-		log.Println("failed to get connection information:", err)
+		monitor.SetError(r.Context(), "connection_lookup_failed")
+		monitor.Logger(r.Context()).Error(
+			"instance_connection_lookup_failed",
+			"cause", err,
+		)
 		httpresponse.PrintError(w, http.StatusInternalServerError, "failed to get connection information")
 		return
 	}
@@ -273,6 +316,10 @@ func requirePrincipal(
 ) (Principal, bool) {
 	principal, ok := PrincipalFromContext(r.Context())
 	if !ok || strings.TrimSpace(principal.UserID) == "" {
+		monitor.SetError(r.Context(), "missing_principal")
+
+		monitor.Logger(r.Context()).Error("request_principal_missing")
+
 		httpresponse.PrintError(
 			w,
 			http.StatusUnauthorized,
@@ -297,19 +344,19 @@ func canAccessInstance(
 		instance.OwnerID == principal.UserID
 }
 
-func (h *Handler) getAuthorizedInstance(
-	w http.ResponseWriter,
-	r *http.Request,
-	id string,
-) (DBInstance, bool) {
+func (h *Handler) getAuthorizedInstance(w http.ResponseWriter, r *http.Request, id string) (DBInstance, bool) {
+	monitor.SetResourceID(r.Context(), id)
+
 	principal, ok := requirePrincipal(w, r)
 	if !ok {
+		monitor.SetError(r.Context(), "missing_principal")
 		return DBInstance{}, false
 	}
 
 	instance, err := h.store.Get(r.Context(), id)
 	if err != nil {
 		if errors.Is(err, ErrInstanceNotFound) {
+			monitor.SetError(r.Context(), "instance_not_found")
 			httpresponse.PrintError(
 				w,
 				http.StatusNotFound,
@@ -318,7 +365,13 @@ func (h *Handler) getAuthorizedInstance(
 			return DBInstance{}, false
 		}
 
-		log.Println("failed to get instance:", err)
+		monitor.SetError(r.Context(), "instance_get_failed")
+		monitor.Logger(r.Context()).Error(
+			"instance_operation_failed",
+			"operation", "get",
+			"cause", err,
+		)
+		// log.Println("failed to get instance:", err)
 		httpresponse.PrintError(
 			w,
 			http.StatusInternalServerError,
@@ -328,6 +381,16 @@ func (h *Handler) getAuthorizedInstance(
 	}
 
 	if !canAccessInstance(principal, instance) {
+		monitor.SetError(
+			r.Context(),
+			"instance_access_denied",
+		)
+
+		monitor.Logger(r.Context()).Warn(
+			"authorization_failed",
+			"reason", "instance_access_denied",
+		)
+
 		// Do not reveal that another user's instance exists.
 		httpresponse.PrintError(
 			w,
@@ -347,6 +410,6 @@ func (h *Handler) SyncInstanceCount(ctx context.Context) error {
 		return err
 	}
 
-	cloudmetrics.InstancesCurrent.Set(float64(len(instanceList)))
+	monitor.InstancesCurrent.Set(float64(len(instanceList)))
 	return nil
 }

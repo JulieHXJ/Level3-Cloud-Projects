@@ -2,9 +2,11 @@ package main
 
 import (
 	"context"
-	"log"
+	"log/slog"
 	"net/http"
 	"os"
+	"os/signal"
+	"syscall"
 	"time"
 
 	api "cloud3-api/internal/api"
@@ -27,21 +29,34 @@ const (
 func main() {
 	cloudmonitor.Init()
 
-	ctx := context.Background()
+	// ctx := context.Background()
+	ctx, stop := signal.NotifyContext(
+		context.Background(),
+		os.Interrupt,
+		syscall.SIGTERM,
+	)
+	defer stop()
 
 	// user db related
 	platformDatabaseURL := os.Getenv("PLATFORM_DATABASE_URL")
 	if platformDatabaseURL == "" {
-		log.Fatal("PLATFORM_DATABASE_URL is not set")
+		slog.Error(
+			"platform_database_configuration_failed",
+			"error", "platform_database_url_missing",
+		)
+		return
 	}
 
 	userStore, err := user.NewPostgresStorage(ctx, platformDatabaseURL)
 	if err != nil {
-		log.Fatal("failed to connect to platform database: ", err)
+		slog.Error(
+			"platform_database_connection_failed",
+			"error", "database_connection_failed",
+		)
+		return
 	}
 	defer userStore.Close()
-
-	log.Println("connected to platform database")
+	slog.Info("platform_database_connected")
 
 	// create Kubernetes storage
 	namespace := os.Getenv("DB_NAMESPACE")
@@ -51,25 +66,36 @@ func main() {
 
 	store, err := instance.NewKubeStorage(namespace)
 	if err != nil {
-		log.Fatal("failed to create Kubernetes storage: ", err)
+		slog.Error(
+			"kubernetes_storage_initialization_failed",
+			"error", "kubernetes_storage_initialization_failed",
+		)
+		return
 	}
+
+	slog.Info(
+		"kubernetes_storage_initialized",
+		"namespace", namespace,
+	)
 
 	// authService
 	authService, err := auth.NewAuthService(userStore)
 	if err != nil {
-		log.Fatal("failed to configure authentication: ", err)
+		slog.Error(
+			"authentication_configuration_failed",
+			"error", "authentication_configuration_failed",
+		)
+		return
 	}
 
 	//wrapper for Instance count
 	instanceHandler := instance.NewHandler(store)
 
 	if err := instanceHandler.SyncInstanceCount(ctx); err != nil {
-		log.Printf(
-			"failed to initialize instance count metric: %v",
-			err,
-		)
+		slog.Warn("instance_count_metric_sync_failed")
 	}
 
+	// ths real business starts!
 	apiServer := &APIServer{
 		auth:      authService,
 		userStore: userStore,
@@ -103,9 +129,9 @@ func main() {
 		ReadHeaderTimeout: 5 * time.Second,
 	}
 
-	log.Println("Server is listening to http://localhost:8080")
+	slog.Info("server_started", "address", server.Addr)
 	err = server.ListenAndServe()
 	if err != nil && err != http.ErrServerClosed {
-		log.Fatal(err)
+		slog.Error("server_failed", "error", "http_server_failed")
 	}
 }

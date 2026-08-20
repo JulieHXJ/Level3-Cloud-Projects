@@ -69,3 +69,34 @@ func SetError(ctx context.Context, err string) {
 
 	info.Error = err
 }
+
+// logger
+func Logger(ctx context.Context) *slog.Logger {
+	logger := slog.Default()
+
+	info := InfoFromContext(ctx)
+	if info == nil {
+		return logger
+	}
+
+	attributes := []any{
+		"request_id", info.RequestID,
+	}
+
+	if info.ActorID != "" {
+		attributes = append(
+			attributes,
+			"actor_id", info.ActorID,
+			"actor_role", info.ActorRole,
+		)
+	}
+
+	if info.ResourceID != "" {
+		attributes = append(
+			attributes,
+			"resource_id", info.ResourceID,
+		)
+	}
+
+	return logger.With(attributes...)
+}

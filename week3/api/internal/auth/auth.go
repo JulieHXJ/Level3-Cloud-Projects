@@ -11,6 +11,7 @@ import (
 
 	"cloud3-api/internal/httpresponse"
 	"cloud3-api/internal/instance"
+	"cloud3-api/internal/monitor"
 	"cloud3-api/internal/user"
 
 	"github.com/golang-jwt/jwt/v5"
@@ -165,6 +166,11 @@ func (a *AuthService) JwtMiddleware(next http.Handler) http.Handler {
 			r.Header.Get("Authorization"),
 		)
 		if !ok {
+			monitor.SetError(r.Context(), "missing_bearer_token")
+			monitor.Logger(r.Context()).Warn(
+				"authentication_failed",
+				"reason", "missing_bearer_token",
+			)
 			unauthorized(w)
 			return
 		}
@@ -193,6 +199,11 @@ func (a *AuthService) JwtMiddleware(next http.Handler) http.Handler {
 		)
 
 		if err != nil || !token.Valid {
+			monitor.SetError(r.Context(), "invalid_token")
+			monitor.Logger(r.Context()).Warn(
+				"authentication_failed",
+				"reason", "invalid_token",
+			)
 			unauthorized(w)
 			return
 		}
@@ -200,15 +211,36 @@ func (a *AuthService) JwtMiddleware(next http.Handler) http.Handler {
 		// These fields are required by my application,
 		// Only supported platform roles are accepted.
 		if claims.Subject == "" {
+			monitor.SetError(
+				r.Context(),
+				"invalid_token_subject",
+			)
+
+			monitor.Logger(r.Context()).Warn(
+				"authentication_failed",
+				"reason", "invalid_token_subject",
+			)
 			unauthorized(w)
 			return
 		}
 
 		if claims.Role != "admin" &&
 			claims.Role != "user" {
+			monitor.SetError(
+				r.Context(),
+				"invalid_token_role",
+			)
+
+			monitor.Logger(r.Context()).Warn(
+				"authentication_failed",
+				"reason", "invalid_token_role",
+			)
+
 			unauthorized(w)
 			return
 		}
+
+		monitor.SetActor(r.Context(), claims.Subject, claims.Role)
 
 		// pass claim to later handlers.
 		requestContext := context.WithValue(
